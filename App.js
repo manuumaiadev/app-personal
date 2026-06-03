@@ -1,20 +1,37 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { NavigationContainer, CommonActions, createNavigationContainerRef } from '@react-navigation/native';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import RootNavigator from './src/navigation';
+
+export const navigationRef = createNavigationContainerRef();
+
+function AuthRedirector() {
+  const { usuario } = useAuth();
+  const prevUsuario = useRef(usuario);
+
+  useEffect(() => {
+    const eraLogado = prevUsuario.current !== null;
+    const estahDeslogado = usuario === null;
+
+    if (eraLogado && estahDeslogado && navigationRef.isReady()) {
+      navigationRef.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] })
+      );
+    }
+
+    prevUsuario.current = usuario;
+  }, [usuario]);
+
+  return null;
+}
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <AuthProvider>
+      <NavigationContainer ref={navigationRef}>
+        <RootNavigator />
+        <AuthRedirector />
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
