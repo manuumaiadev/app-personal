@@ -41,13 +41,19 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
+  async function atualizarUsuario(dados) {
+    if (!usuario?.uid) return;
+    await updateDoc(doc(db, 'users', usuario.uid), dados);
+    setUsuario(prev => ({ ...prev, ...dados }));
+  }
+
   function logout() {
     setUsuario(null);
     signOut(auth).catch(() => {});
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, carregando, logout }}>
+    <AuthContext.Provider value={{ usuario, carregando, logout, atualizarUsuario }}>
       {children}
     </AuthContext.Provider>
   );

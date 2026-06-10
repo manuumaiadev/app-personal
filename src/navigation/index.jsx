@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 import LoginScreen from '../screens/auth/LoginScreen';
 import CadastroScreen from '../screens/auth/CadastroScreen';
@@ -12,11 +13,12 @@ const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
   const { usuario, carregando } = useAuth();
+  const { theme } = useTheme();
 
   if (carregando) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#E31E24" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.bg }}>
+        <ActivityIndicator size="large" color={theme.red} />
       </View>
     );
   }

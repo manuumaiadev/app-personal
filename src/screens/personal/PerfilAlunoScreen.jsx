@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
 import { listarFichasAluno } from '../../services/fichas';
 import { listarTreinosFicha } from '../../services/treinos';
 import { listarHistoricoAluno } from '../../services/execucoes';
@@ -29,6 +30,7 @@ function normalizarPeriodo(item) {
 
 export default function PerfilAlunoScreen({ route, navigation }) {
   const { aluno } = route.params;
+  const { usuario } = useAuth();
   const [aba, setAba] = useState('Fichas');
   const [fichas, setFichas] = useState([]);
   const [fichaAtivaId, setFichaAtivaId] = useState(null);
@@ -68,11 +70,6 @@ export default function PerfilAlunoScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Logo */}
-      <View style={styles.logoWrap}>
-        <Image source={require('../../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-      </View>
-
       {/* NavBar */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => navigation.navigate('AlunosList')} style={styles.voltar}>
@@ -82,9 +79,14 @@ export default function PerfilAlunoScreen({ route, navigation }) {
         <Text style={styles.navTitulo}>
           {aluno.nome?.split(' ')[0]} {aluno.nome?.split(' ').slice(-1)[0]}
         </Text>
-        <TouchableOpacity onPress={() => navigation.navigate('MontarTreino', { aluno })}>
-          <Ionicons name="create-outline" size={22} color="#E31E24" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('Chat', { personalId: usuario.uid, alunoId: aluno.id, nomeOutro: aluno.nome })}>
+            <Ionicons name="chatbubble-outline" size={22} color="#E31E24" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('MontarTreino', { aluno })}>
+            <Ionicons name="create-outline" size={22} color="#E31E24" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Header aluno */}
@@ -367,8 +369,6 @@ function InfoLinha({ label, valor }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  logoWrap: { alignItems: 'center', paddingTop: 52, backgroundColor: '#f9fafb' },
-  logo: { width: 200, height: 64 },
   navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14 },
   voltar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   voltarTexto: { color: '#E31E24', fontSize: 15 },

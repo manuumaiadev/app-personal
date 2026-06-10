@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { NavigationContainer, CommonActions, createNavigationContainerRef } from '@react-navigation/native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import RootNavigator from './src/navigation';
 
 export const navigationRef = createNavigationContainerRef();
@@ -27,11 +28,13 @@ function AuthRedirector() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer ref={navigationRef}>
-        <RootNavigator />
-        <AuthRedirector />
-      </NavigationContainer>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <NavigationContainer ref={navigationRef}>
+          <RootNavigator />
+          <AuthRedirector />
+        </NavigationContainer>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

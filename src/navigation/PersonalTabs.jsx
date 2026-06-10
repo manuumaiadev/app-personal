@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
 
 import DashboardScreen from '../screens/personal/DashboardScreen';
 import AlunosScreen from '../screens/personal/AlunosScreen';
@@ -14,6 +15,7 @@ import RenovarFichaScreen from '../screens/personal/RenovarFichaScreen';
 import EditarTreinoScreen from '../screens/personal/EditarTreinoScreen';
 import PerfilPersonalScreen from '../screens/personal/PerfilPersonalScreen';
 import NovoAlunoScreen from '../screens/personal/NovoAlunoScreen';
+import ChatScreen from '../screens/chat/ChatScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -27,6 +29,7 @@ function AlunosStack() {
       <Stack.Screen name="MontarTreino" component={MontarTreinoScreen} />
       <Stack.Screen name="EditarTreino" component={EditarTreinoScreen} />
       <Stack.Screen name="RenovarFicha" component={RenovarFichaScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
     </Stack.Navigator>
   );
 }
@@ -42,13 +45,19 @@ function ExerciciosStack() {
 }
 
 export default function PersonalTabs() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: '#E31E24',
-        tabBarInactiveTintColor: '#9ca3af',
-        tabBarStyle: { paddingBottom: 4 },
+        tabBarActiveTintColor: theme.red,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarStyle: {
+          backgroundColor: theme.surface,
+          borderTopColor: theme.border,
+          paddingBottom: 4,
+        },
         tabBarIcon: ({ color, size }) => {
           const icons = {
             Dashboard: 'grid-outline',

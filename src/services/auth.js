@@ -3,6 +3,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
   getAuth,
+  updateEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from 'firebase/auth';
 import { doc, setDoc, getFirestore } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -26,6 +30,20 @@ export async function login(email, senha) {
 
 export async function logout() {
   await signOut(auth);
+}
+
+export async function reautenticar(senhaAtual) {
+  const user = auth.currentUser;
+  const cred = EmailAuthProvider.credential(user.email, senhaAtual);
+  await reauthenticateWithCredential(user, cred);
+}
+
+export async function alterarEmail(novoEmail) {
+  await updateEmail(auth.currentUser, novoEmail);
+}
+
+export async function alterarSenha(novaSenha) {
+  await updatePassword(auth.currentUser, novaSenha);
 }
 
 // Cria conta de aluno sem deslogar o personal — usa app secundário
