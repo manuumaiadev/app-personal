@@ -70,6 +70,11 @@ function makeStyles(t) {
     exRow: { flexDirection: 'row', justifyContent: 'space-between' },
     exNome: { color: t.textPrimary, fontWeight: '500' },
     exCargas: { color: t.textSecondary, fontSize: 13 },
+    expandBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: 6, paddingVertical: 12, marginTop: 4,
+    },
+    expandTexto: { fontSize: 13, fontWeight: '600', color: t.red },
   };
 }
 
@@ -81,6 +86,7 @@ export default function TreinosScreen({ navigation }) {
   const [historico, setHistorico] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [expandido, setExpandido] = useState(null);
+  const [histExpandido, setHistExpandido] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -216,40 +222,51 @@ export default function TreinosScreen({ navigation }) {
           <Text style={s.vazioSub}>Nenhum treino registrado ainda.</Text>
         </View>
       ) : (
-        historico.map(item => (
-          <TouchableOpacity
-            key={item.id}
-            style={s.histCard}
-            onPress={() => setExpandido(expandido === item.id ? null : item.id)}
-            activeOpacity={0.8}
-          >
-            <View style={s.histHeader}>
-              <View style={s.letraBox}>
-                <Text style={s.letraTexto}>{item.letra || '?'}</Text>
+        <>
+          {(histExpandido ? historico : historico.slice(0, 1)).map(item => (
+            <TouchableOpacity
+              key={item.id}
+              style={s.histCard}
+              onPress={() => setExpandido(expandido === item.id ? null : item.id)}
+              activeOpacity={0.8}
+            >
+              <View style={s.histHeader}>
+                <View style={s.letraBox}>
+                  <Text style={s.letraTexto}>{item.letra || '?'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.histData}>
+                    {item.dataHora?.toDate().toLocaleDateString('pt-BR', {
+                      weekday: 'short', day: '2-digit', month: 'short',
+                    })}
+                  </Text>
+                  <Text style={s.histQtd}>{item.exercicios?.length || 0} exercicios</Text>
+                </View>
+                <Ionicons name={expandido === item.id ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textSecondary} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.histData}>
-                  {item.dataHora?.toDate().toLocaleDateString('pt-BR', {
-                    weekday: 'short', day: '2-digit', month: 'short',
-                  })}
-                </Text>
-                <Text style={s.histQtd}>{item.exercicios?.length || 0} exercicios</Text>
-              </View>
-              <Ionicons name={expandido === item.id ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textSecondary} />
-            </View>
 
-            {expandido === item.id && (
-              <View style={s.histDetalhes}>
-                {item.exercicios?.map((ex, i) => (
-                  <View key={i} style={s.exRow}>
-                    <Text style={s.exNome}>{ex.nome}</Text>
-                    <Text style={s.exCargas}>{ex.cargas?.filter(Boolean).join(' | ') || '—'} kg</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </TouchableOpacity>
-        ))
+              {expandido === item.id && (
+                <View style={s.histDetalhes}>
+                  {item.exercicios?.map((ex, i) => (
+                    <View key={i} style={s.exRow}>
+                      <Text style={s.exNome}>{ex.nome}</Text>
+                      <Text style={s.exCargas}>{ex.cargas?.filter(Boolean).join(' | ') || '—'} kg</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+
+          {historico.length > 1 && (
+            <TouchableOpacity style={s.expandBtn} onPress={() => setHistExpandido(!histExpandido)}>
+              <Text style={s.expandTexto}>
+                {histExpandido ? 'Ver menos' : `Ver historico completo (${historico.length})`}
+              </Text>
+              <Ionicons name={histExpandido ? 'chevron-up' : 'chevron-down'} size={14} color={theme.red} />
+            </TouchableOpacity>
+          )}
+        </>
       )}
     </ScrollView>
   );

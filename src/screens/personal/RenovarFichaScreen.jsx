@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity,
   Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { Timestamp } from 'firebase/firestore';
@@ -8,10 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { criarFicha } from '../../services/fichas';
 import { listarTreinosFicha, criarTreino } from '../../services/treinos';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function RenovarFichaScreen({ route, navigation }) {
   const { ficha, aluno } = route.params;
   const { usuario } = useAuth();
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [nome, setNome] = useState(ficha.nome);
   const [semanas, setSemanas] = useState(String(ficha.semanas || 4));
   const [carregando, setCarregando] = useState(false);
@@ -28,7 +31,6 @@ export default function RenovarFichaScreen({ route, navigation }) {
     if (!nome.trim()) { Alert.alert('Atenção', 'Dê um nome à nova ficha.'); return; }
     setCarregando(true);
     try {
-      // 1. Cria nova ficha — a antiga continua intacta no histórico
       const novaFicha = await criarFicha({
         nome: nome.trim(),
         alunoId: ficha.alunoId,
@@ -37,7 +39,6 @@ export default function RenovarFichaScreen({ route, navigation }) {
         dataVencimento: Timestamp.fromDate(novaData),
       });
 
-      // 2. Copia os treinos da ficha anterior para a nova
       const treinosAntigos = await listarTreinosFicha(ficha.id);
       await Promise.all(
         treinosAntigos.map(t =>
@@ -63,72 +64,74 @@ export default function RenovarFichaScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.voltar}>
-        <Ionicons name="arrow-back" size={22} color="#E31E24" />
-        <Text style={styles.voltarTexto}>Voltar</Text>
+    <ScrollView style={s.container} keyboardShouldPersistTaps="handled">
+      <TouchableOpacity onPress={() => navigation.goBack()} style={s.voltar}>
+        <Ionicons name="arrow-back" size={22} color={theme.red} />
+        <Text style={s.voltarTexto}>Voltar</Text>
       </TouchableOpacity>
 
-      <Text style={styles.titulo}>Renovar Ficha</Text>
-      {aluno && <Text style={styles.subtitulo}>{aluno.nome}</Text>}
+      <Text style={s.titulo}>Renovar Ficha</Text>
+      {aluno && <Text style={s.subtitulo}>{aluno.nome}</Text>}
 
-      <View style={styles.infoBox}>
-        <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-        <Text style={styles.infoTexto}>
+      <View style={s.infoBox}>
+        <Ionicons name="information-circle-outline" size={16} color={theme.textSecondary} />
+        <Text style={s.infoTexto}>
           Uma nova ficha será criada com os mesmos treinos. A ficha anterior fica salva no histórico.
         </Text>
       </View>
 
-      <Text style={styles.label}>Nome da nova ficha</Text>
+      <Text style={s.label}>Nome da nova ficha</Text>
       <TextInput
-        style={styles.input}
+        style={s.input}
         value={nome}
         onChangeText={setNome}
         placeholder="Ex: Hipertrofia A/B/C — Ciclo 2"
-        placeholderTextColor="#9ca3af"
+        placeholderTextColor={theme.placeholder}
       />
 
-      <Text style={styles.label}>Duração (semanas)</Text>
+      <Text style={s.label}>Duração (semanas)</Text>
       <TextInput
-        style={styles.input}
+        style={s.input}
         keyboardType="numeric"
         value={semanas}
         onChangeText={setSemanas}
         placeholder="Ex: 4"
-        placeholderTextColor="#9ca3af"
+        placeholderTextColor={theme.placeholder}
       />
 
       {parseInt(semanas) > 0 && (
-        <View style={styles.preview}>
-          <Ionicons name="calendar-outline" size={18} color="#E31E24" />
-          <Text style={styles.previewTexto}>
+        <View style={s.preview}>
+          <Ionicons name="calendar-outline" size={18} color={theme.red} />
+          <Text style={s.previewTexto}>
             Vencimento: {novaData.toLocaleDateString('pt-BR')}
           </Text>
         </View>
       )}
 
-      <TouchableOpacity style={styles.botao} onPress={handleRenovar} disabled={carregando}>
+      <TouchableOpacity style={s.botao} onPress={handleRenovar} disabled={carregando}>
         {carregando
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.botaoTexto}>Criar nova ficha</Text>
+          : <Text style={s.botaoTexto}>Criar nova ficha</Text>
         }
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb', paddingHorizontal: 20 },
-  voltar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 60, marginBottom: 24 },
-  voltarTexto: { color: '#E31E24', fontSize: 15 },
-  titulo: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  subtitulo: { color: '#6b7280', fontSize: 14, marginBottom: 20 },
-  infoBox: { flexDirection: 'row', gap: 8, backgroundColor: '#f3f4f6', borderRadius: 10, padding: 12, marginBottom: 24, alignItems: 'flex-start' },
-  infoTexto: { flex: 1, color: '#6b7280', fontSize: 13, lineHeight: 18 },
-  label: { color: '#374151', fontWeight: '600', marginBottom: 8 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 14, fontSize: 15, color: '#111827', marginBottom: 16 },
-  preview: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fde8e9', borderRadius: 10, padding: 12, marginBottom: 24 },
-  previewTexto: { color: '#c01018', fontWeight: '500' },
-  botao: { backgroundColor: '#E31E24', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 40 },
-  botaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
-});
+function makeStyles(t) {
+  return {
+    container: { flex: 1, backgroundColor: t.bg, paddingHorizontal: 20 },
+    voltar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 60, marginBottom: 24 },
+    voltarTexto: { color: t.red, fontSize: 15 },
+    titulo: { fontSize: 24, fontWeight: '700', color: t.textPrimary, marginBottom: 4 },
+    subtitulo: { color: t.textSecondary, fontSize: 14, marginBottom: 20 },
+    infoBox: { flexDirection: 'row', gap: 8, backgroundColor: t.elevated, borderRadius: 10, padding: 12, marginBottom: 24, alignItems: 'flex-start' },
+    infoTexto: { flex: 1, color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+    label: { color: t.textPrimary, fontWeight: '600', marginBottom: 8 },
+    input: { backgroundColor: t.inputBg, borderWidth: 1, borderColor: t.inputBorder, borderRadius: 10, padding: 14, fontSize: 15, color: t.textPrimary, marginBottom: 16 },
+    preview: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fde8e9', borderRadius: 10, padding: 12, marginBottom: 24 },
+    previewTexto: { color: '#c01018', fontWeight: '500' },
+    botao: { backgroundColor: t.red, borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 40 },
+    botaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  };
+}

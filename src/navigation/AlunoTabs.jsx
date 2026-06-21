@@ -67,6 +67,7 @@ export default function AlunoTabs() {
           borderTopColor: theme.border,
           paddingBottom: 4,
         },
+        tabBarShowLabel: false,
         tabBarIcon: ({ color, size }) => {
           const icons = {
             Inicio: 'home-outline',

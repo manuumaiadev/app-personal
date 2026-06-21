@@ -1,14 +1,17 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
+import { useState, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { criarExercicio } from '../../services/exercicios';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 const GRUPOS = ['Peito', 'Costas', 'Ombro', 'Bíceps', 'Tríceps', 'Abdômen', 'Glúteo', 'Quadríceps', 'Posterior', 'Panturrilha', 'Funcional'];
 const EQUIPAMENTOS = ['Barra', 'Halteres', 'Máquina', 'Cabo / Polia', 'Peso corporal', 'Elástico', 'Kettlebell', 'Smith'];
 
 export default function NovoExercicioScreen({ navigation }) {
   const { usuario } = useAuth();
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [nome, setNome] = useState('');
   const [grupo, setGrupo] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -37,97 +40,96 @@ export default function NovoExercicioScreen({ navigation }) {
   return (
     <>
       <Modal visible={sucesso} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalIcone}>✅</Text>
-            <Text style={styles.modalTitulo}>Exercício salvo!</Text>
-            <TouchableOpacity style={styles.modalBotao} onPress={() => { setSucesso(false); navigation.goBack(); }}>
-              <Text style={styles.modalBotaoTexto}>OK</Text>
+        <View style={s.overlay}>
+          <View style={s.modalBox}>
+            <Text style={s.modalTitulo}>Exercício salvo!</Text>
+            <TouchableOpacity style={s.modalBotao} onPress={() => { setSucesso(false); navigation.goBack(); }}>
+              <Text style={s.modalBotaoTexto}>OK</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.voltar}>
-          <Ionicons name="arrow-back" size={22} color="#E31E24" />
-          <Text style={styles.voltarTexto}>Voltar</Text>
+      <ScrollView style={s.container} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.voltar}>
+          <Ionicons name="arrow-back" size={22} color={theme.red} />
+          <Text style={s.voltarTexto}>Voltar</Text>
         </TouchableOpacity>
-        <Text style={styles.titulo}>Novo Exercício</Text>
+        <Text style={s.titulo}>Novo Exercício</Text>
 
-        {!!erro && <Text style={styles.erro}>{erro}</Text>}
+        {!!erro && <Text style={s.erro}>{erro}</Text>}
 
-        <Text style={styles.label}>Grupo muscular *</Text>
-        <TouchableOpacity style={styles.dropdown} onPress={() => setModalGrupo(true)}>
-          <Text style={[styles.dropdownTexto, !grupo && { color: '#9ca3af' }]}>
+        <Text style={s.label}>Grupo muscular *</Text>
+        <TouchableOpacity style={s.dropdown} onPress={() => setModalGrupo(true)}>
+          <Text style={[s.dropdownTexto, !grupo && { color: theme.placeholder }]}>
             {grupo || 'Selecionar...'}
           </Text>
-          <Ionicons name="chevron-down" size={16} color="#9ca3af" />
+          <Ionicons name="chevron-down" size={16} color={theme.placeholder} />
         </TouchableOpacity>
 
-        <Text style={styles.label}>Nome do exercício *</Text>
-        <TextInput style={styles.input} placeholder="Ex: Supino reto com barra" placeholderTextColor="#9ca3af"
+        <Text style={s.label}>Nome do exercício *</Text>
+        <TextInput style={s.input} placeholder="Ex: Supino reto com barra" placeholderTextColor={theme.placeholder}
           value={nome} onChangeText={setNome} />
 
-        <Text style={styles.label}>Descrição / instrução</Text>
-        <TextInput style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
-          placeholder="Dicas de execução..." placeholderTextColor="#9ca3af"
+        <Text style={s.label}>Descrição / instrução</Text>
+        <TextInput style={[s.input, { height: 90, textAlignVertical: 'top' }]}
+          placeholder="Dicas de execução..." placeholderTextColor={theme.placeholder}
           multiline value={descricao} onChangeText={setDescricao} />
 
-        <Text style={styles.label}>URL do vídeo (YouTube)</Text>
-        <View style={styles.urlRow}>
-          <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="https://youtube.com/..." placeholderTextColor="#9ca3af"
+        <Text style={s.label}>URL do vídeo (YouTube)</Text>
+        <View style={s.urlRow}>
+          <TextInput style={[s.input, { flex: 1, marginBottom: 0 }]} placeholder="https://youtube.com/..." placeholderTextColor={theme.placeholder}
             value={videoUrl} onChangeText={setVideoUrl} autoCapitalize="none" />
           <TouchableOpacity
-            style={styles.urlPreview}
+            style={s.urlPreview}
             onPress={() => videoUrl && require('react-native').Linking.openURL(videoUrl)}
             disabled={!videoUrl}
           >
-            <Ionicons name="play-circle-outline" size={22} color={videoUrl ? '#E31E24' : '#d1d5db'} />
+            <Ionicons name="play-circle-outline" size={22} color={videoUrl ? theme.red : theme.textTertiary} />
           </TouchableOpacity>
         </View>
         <View style={{ height: 16 }} />
 
-        <Text style={styles.label}>Aparelhos / equipamento</Text>
-        <TouchableOpacity style={styles.dropdown} onPress={() => setModalEquip(true)}>
-          <Text style={[styles.dropdownTexto, !equipamento && { color: '#9ca3af' }]}>
+        <Text style={s.label}>Aparelhos / equipamento</Text>
+        <TouchableOpacity style={s.dropdown} onPress={() => setModalEquip(true)}>
+          <Text style={[s.dropdownTexto, !equipamento && { color: theme.placeholder }]}>
             {equipamento || 'Selecionar...'}
           </Text>
-          <Ionicons name="chevron-down" size={16} color="#9ca3af" />
+          <Ionicons name="chevron-down" size={16} color={theme.placeholder} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.botao} onPress={handleSalvar} disabled={carregando}>
-          {carregando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar exercício</Text>}
+        <TouchableOpacity style={s.botao} onPress={handleSalvar} disabled={carregando}>
+          {carregando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoTexto}>Salvar exercício</Text>}
         </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={modalGrupo} transparent animationType="slide">
-        <View style={styles.pickerOverlay}>
-          <View style={styles.pickerBox}>
-            <Text style={styles.pickerTitulo}>Grupo muscular</Text>
+        <View style={s.pickerOverlay}>
+          <View style={s.pickerBox}>
+            <Text style={s.pickerTitulo}>Grupo muscular</Text>
             {GRUPOS.map(g => (
-              <TouchableOpacity key={g} style={styles.pickerItem} onPress={() => { setGrupo(g); setModalGrupo(false); }}>
-                <Text style={[styles.pickerTexto, grupo === g && { color: '#E31E24', fontWeight: '700' }]}>{g}</Text>
+              <TouchableOpacity key={g} style={s.pickerItem} onPress={() => { setGrupo(g); setModalGrupo(false); }}>
+                <Text style={[s.pickerTexto, grupo === g && { color: theme.red, fontWeight: '700' }]}>{g}</Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.pickerFechar} onPress={() => setModalGrupo(false)}>
-              <Text style={styles.pickerFecharTexto}>Cancelar</Text>
+            <TouchableOpacity style={s.pickerFechar} onPress={() => setModalGrupo(false)}>
+              <Text style={s.pickerFecharTexto}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       <Modal visible={modalEquip} transparent animationType="slide">
-        <View style={styles.pickerOverlay}>
-          <View style={styles.pickerBox}>
-            <Text style={styles.pickerTitulo}>Equipamento</Text>
+        <View style={s.pickerOverlay}>
+          <View style={s.pickerBox}>
+            <Text style={s.pickerTitulo}>Equipamento</Text>
             {EQUIPAMENTOS.map(e => (
-              <TouchableOpacity key={e} style={styles.pickerItem} onPress={() => { setEquipamento(e); setModalEquip(false); }}>
-                <Text style={[styles.pickerTexto, equipamento === e && { color: '#E31E24', fontWeight: '700' }]}>{e}</Text>
+              <TouchableOpacity key={e} style={s.pickerItem} onPress={() => { setEquipamento(e); setModalEquip(false); }}>
+                <Text style={[s.pickerTexto, equipamento === e && { color: theme.red, fontWeight: '700' }]}>{e}</Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.pickerFechar} onPress={() => setModalEquip(false)}>
-              <Text style={styles.pickerFecharTexto}>Cancelar</Text>
+            <TouchableOpacity style={s.pickerFechar} onPress={() => setModalEquip(false)}>
+              <Text style={s.pickerFecharTexto}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -136,31 +138,32 @@ export default function NovoExercicioScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb', paddingHorizontal: 20 },
-  voltar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 60, marginBottom: 16 },
-  voltarTexto: { color: '#E31E24', fontSize: 15 },
-  titulo: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 24 },
-  erro: { color: '#E31E24', fontSize: 14, marginBottom: 12 },
-  label: { color: '#374151', fontWeight: '600', marginBottom: 6 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 14, fontSize: 15, color: '#111827', marginBottom: 16 },
-  dropdown: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  urlRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
-  urlPreview: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 13 },
-  dropdownTexto: { fontSize: 15, color: '#111827' },
-  botao: { backgroundColor: '#E31E24', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 40, marginTop: 8 },
-  botaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  modalBox: { backgroundColor: '#fff', borderRadius: 16, padding: 32, alignItems: 'center', width: '100%' },
-  modalIcone: { fontSize: 48, marginBottom: 12 },
-  modalTitulo: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 20 },
-  modalBotao: { backgroundColor: '#E31E24', borderRadius: 10, padding: 14, alignItems: 'center', width: '100%' },
-  modalBotaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  pickerBox: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '60%' },
-  pickerTitulo: { fontWeight: '700', fontSize: 16, color: '#111827', marginBottom: 12 },
-  pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  pickerTexto: { fontSize: 15, color: '#374151' },
-  pickerFechar: { marginTop: 12, padding: 14, alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 10 },
-  pickerFecharTexto: { fontWeight: '600', color: '#374151' },
-});
+function makeStyles(t) {
+  return {
+    container: { flex: 1, backgroundColor: t.bg, paddingHorizontal: 20 },
+    voltar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 60, marginBottom: 16 },
+    voltarTexto: { color: t.red, fontSize: 15 },
+    titulo: { fontSize: 24, fontWeight: '700', color: t.textPrimary, marginBottom: 24 },
+    erro: { color: t.red, fontSize: 14, marginBottom: 12 },
+    label: { color: t.textPrimary, fontWeight: '600', marginBottom: 6 },
+    input: { backgroundColor: t.inputBg, borderWidth: 1, borderColor: t.inputBorder, borderRadius: 10, padding: 14, fontSize: 15, color: t.textPrimary, marginBottom: 16 },
+    dropdown: { backgroundColor: t.inputBg, borderWidth: 1, borderColor: t.inputBorder, borderRadius: 10, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    urlRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
+    urlPreview: { backgroundColor: t.inputBg, borderWidth: 1, borderColor: t.inputBorder, borderRadius: 10, padding: 13 },
+    dropdownTexto: { fontSize: 15, color: t.textPrimary },
+    botao: { backgroundColor: t.red, borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 40, marginTop: 8 },
+    botaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+    modalBox: { backgroundColor: t.surface, borderRadius: 16, padding: 32, alignItems: 'center', width: '100%' },
+    modalTitulo: { fontSize: 20, fontWeight: '700', color: t.textPrimary, marginBottom: 20 },
+    modalBotao: { backgroundColor: t.red, borderRadius: 10, padding: 14, alignItems: 'center', width: '100%' },
+    modalBotaoTexto: { color: '#fff', fontWeight: '600', fontSize: 16 },
+    pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    pickerBox: { backgroundColor: t.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '60%' },
+    pickerTitulo: { fontWeight: '700', fontSize: 16, color: t.textPrimary, marginBottom: 12 },
+    pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.border },
+    pickerTexto: { fontSize: 15, color: t.textPrimary },
+    pickerFechar: { marginTop: 12, padding: 14, alignItems: 'center', backgroundColor: t.elevated, borderRadius: 10 },
+    pickerFecharTexto: { fontWeight: '600', color: t.textPrimary },
+  };
+}

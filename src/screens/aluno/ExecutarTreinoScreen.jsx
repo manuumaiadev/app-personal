@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, Alert, ActivityIndicator,
+  Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { registrarExecucao } from '../../services/execucoes';
+import { enviarMensagem } from '../../services/chat';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -40,7 +42,6 @@ function makeStyles(t) {
     exNome: { fontSize: 15, fontWeight: '700', color: t.textPrimary, flex: 1, marginRight: 8 },
     exMeta: { fontSize: 12, color: t.textSecondary, marginBottom: 4 },
     exObs: { fontSize: 11, color: t.textTertiary, fontStyle: 'italic', marginBottom: 12, lineHeight: 15 },
-    exMetaRow: { marginBottom: 12 },
     serieRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
     serieNum: { width: 22, fontSize: 11, fontWeight: '700', color: t.textTertiary, textAlign: 'center' },
     inputKg: {
@@ -73,9 +74,28 @@ function makeStyles(t) {
       flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
     },
     btnFinalizarTexto: { color: '#fff', fontWeight: '700', fontSize: 16 },
-    videoBtn: { padding: 4 },
-    progresso: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-    progressoDot: { width: 6, height: 6, borderRadius: 3 },
+    // Modal
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+    modalCard: {
+      backgroundColor: t.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+      padding: 28, paddingBottom: 40,
+    },
+    modalIconRow: { alignItems: 'center', marginBottom: 16 },
+    modalTitulo: { fontSize: 22, fontWeight: '800', color: t.textPrimary, textAlign: 'center', marginBottom: 4 },
+    modalDuracao: { fontSize: 40, fontWeight: '900', color: CYAN, textAlign: 'center', letterSpacing: 2, marginBottom: 24 },
+    modalLabel: { fontSize: 11, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8, marginBottom: 8 },
+    modalInput: {
+      backgroundColor: t.elevated, borderRadius: 14, padding: 14,
+      fontSize: 14, color: t.textPrimary, borderWidth: 1, borderColor: t.border,
+      minHeight: 84, textAlignVertical: 'top', marginBottom: 18,
+    },
+    btnConcluir: {
+      backgroundColor: t.red, borderRadius: 14, padding: 16,
+      alignItems: 'center', marginBottom: 10,
+    },
+    btnConcluirTexto: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    btnPular: { padding: 12, alignItems: 'center' },
+    btnPularTexto: { color: t.textSecondary, fontWeight: '600', fontSize: 14 },
   };
 }
 
@@ -109,11 +129,13 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
     return m;
   });
 
-  const [timer, setTimer] = useState(null); // { seconds, total }
+  const [timer, setTimer] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [tempoTreino, setTempoTreino] = useState(0);
+  const [modalVisivel, setModalVisivel] = useState(false);
+  const [comentario, setComentario] = useState('');
+  const [enviandoComentario, setEnviandoComentario] = useState(false);
 
-  // Cronometro geral do treino
   useEffect(() => {
     const id = setInterval(() => setTempoTreino(t => t + 1), 1000);
     return () => clearInterval(id);
@@ -183,9 +205,7 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           repsRealizadas: repsRealizadas[ex.id] || [],
         })),
       });
-      Alert.alert('Treino finalizado!', `Duracao: ${formatTempo(tempoTreino)}`, [
-        { text: 'Continuar', onPress: () => navigation.navigate('Treinos') }
-      ]);
+      setModalVisivel(true);
     } catch {
       Alert.alert('Erro', 'Nao foi possivel salvar o treino.');
     } finally {
@@ -193,15 +213,31 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
     }
   }
 
+  async function fecharModal(enviar) {
+    const texto = comentario.trim();
+    if (enviar && texto && usuario.personalId) {
+      setEnviandoComentario(true);
+      try {
+        await enviarMensagem(
+          usuario.personalId, usuario.uid, usuario.uid,
+          `[Treino ${treino.letra}] ${texto}`,
+        );
+      } catch {}
+      setEnviandoComentario(false);
+    }
+    setModalVisivel(false);
+    navigation.navigate('Treinos');
+  }
+
   const pct = totalSeries > 0 ? seriesDone / totalSeries : 0;
   const timerPct = timer ? timer.seconds / timer.total : 0;
   const timerDone = timer?.seconds === 0;
+  const temComentario = comentario.trim().length > 0;
 
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.scrollContent} keyboardShouldPersistTaps="handled">
 
-        {/* Header */}
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.voltar}>
             <Ionicons name="arrow-back" size={22} color={theme.red} />
@@ -216,7 +252,6 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Progresso geral */}
         <View style={{ marginBottom: 20 }}>
           <View style={{ height: 4, backgroundColor: theme.elevated, borderRadius: 2, overflow: 'hidden' }}>
             <View style={{ height: 4, width: `${pct * 100}%`, backgroundColor: CYAN, borderRadius: 2 }} />
@@ -238,24 +273,16 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
                     {ex.descanso ? `  ·  ${ex.descanso} descanso` : ''}
                   </Text>
                 </View>
-                {allDone && (
-                  <Ionicons name="checkmark-circle" size={20} color={CYAN} />
-                )}
+                {allDone && <Ionicons name="checkmark-circle" size={20} color={CYAN} />}
               </View>
 
               {ex.grupoMuscular && (
-                <Text style={[s.exMeta, { marginBottom: 8, marginTop: -2 }]}>
-                  {ex.grupoMuscular}
-                </Text>
+                <Text style={[s.exMeta, { marginBottom: 8, marginTop: -2 }]}>{ex.grupoMuscular}</Text>
               )}
+              {ex.observacao && <Text style={s.exObs}>{ex.observacao}</Text>}
 
-              {ex.observacao && (
-                <Text style={s.exObs}>{ex.observacao}</Text>
-              )}
-
-              {/* Cabecalho colunas */}
               <View style={[s.serieRow, { marginBottom: 4 }]}>
-                <Text style={[s.serieNum]} />
+                <Text style={s.serieNum} />
                 <Text style={{ flex: 1, fontSize: 10, fontWeight: '700', color: theme.textTertiary, textAlign: 'center', letterSpacing: 0.5 }}>KG</Text>
                 <Text style={{ width: 8 }} />
                 <Text style={{ width: 48, fontSize: 10, fontWeight: '700', color: theme.textTertiary, textAlign: 'center', letterSpacing: 0.5 }}>REPS</Text>
@@ -304,7 +331,6 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
         })}
       </ScrollView>
 
-      {/* Timer de descanso */}
       {timer !== null && (
         <View style={s.timerWrap}>
           <View style={s.timerInner}>
@@ -328,7 +354,6 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
         </View>
       )}
 
-      {/* Footer */}
       <View style={s.footer}>
         <TouchableOpacity style={s.btnFinalizar} onPress={handleFinalizar} disabled={salvando}>
           {salvando
@@ -340,6 +365,55 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           }
         </TouchableOpacity>
       </View>
+
+      {/* Modal pos-treino */}
+      <Modal visible={modalVisivel} transparent animationType="slide" onRequestClose={() => fecharModal(false)}>
+        <KeyboardAvoidingView
+          style={s.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={s.modalCard}>
+            <View style={s.modalIconRow}>
+              <Ionicons name="checkmark-circle" size={52} color={CYAN} />
+            </View>
+            <Text style={s.modalTitulo}>Treino concluido!</Text>
+            <Text style={s.modalDuracao}>{formatTempo(tempoTreino)}</Text>
+
+            {usuario.personalId && (
+              <>
+                <Text style={s.modalLabel}>COMENTARIO PARA O PERSONAL (opcional)</Text>
+                <TextInput
+                  style={s.modalInput}
+                  placeholder="Como foi o treino? Alguma dificuldade?"
+                  placeholderTextColor={theme.placeholder}
+                  multiline
+                  value={comentario}
+                  onChangeText={setComentario}
+                />
+              </>
+            )}
+
+            <TouchableOpacity
+              style={s.btnConcluir}
+              onPress={() => fecharModal(temComentario)}
+              disabled={enviandoComentario}
+            >
+              {enviandoComentario
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={s.btnConcluirTexto}>
+                    {temComentario ? 'Enviar e fechar' : 'Concluir'}
+                  </Text>
+              }
+            </TouchableOpacity>
+
+            {temComentario && (
+              <TouchableOpacity style={s.btnPular} onPress={() => fecharModal(false)}>
+                <Text style={s.btnPularTexto}>Fechar sem comentar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

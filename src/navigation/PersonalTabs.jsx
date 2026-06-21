@@ -58,6 +58,7 @@ export default function PersonalTabs() {
           borderTopColor: theme.border,
           paddingBottom: 4,
         },
+        tabBarShowLabel: false,
         tabBarIcon: ({ color, size }) => {
           const icons = {
             Dashboard: 'grid-outline',

@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
 import { listarExecucoesRecentes, listarExecucoesHoje } from '../../services/execucoes';
 import { limparDadosFicticios } from '../../utils/seed';
@@ -34,6 +35,8 @@ const FILTRO_KEY = { 'Ativas': 'ativa', 'A vencer': 'a_vencer', 'Vencidas': 'ven
 
 export default function DashboardScreen({ navigation }) {
   const { usuario } = useAuth();
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [todasFichas, setTodasFichas] = useState([]);
   const [alunosMap, setAlunosMap] = useState({});
   const [treinosHoje, setTreinosHoje] = useState(0);
@@ -135,32 +138,32 @@ export default function DashboardScreen({ navigation }) {
     : todasFichas.filter(f => f.status === FILTRO_KEY[filtro]);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={s.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <Image
           source={require('../../../assets/logo.png')}
-          style={styles.logo}
+          style={s.logo}
           resizeMode="contain"
         />
       </View>
 
       {/* Chips de status fichas */}
-      <View style={styles.chipsRow}>
-        <StatChip label="Ativas" valor={counts.ativa} cor={CORES_STATUS.ativa} />
-        <StatChip label="A vencer" valor={counts.a_vencer} cor={CORES_STATUS.a_vencer} />
-        <StatChip label="Vencidas" valor={counts.vencida} cor={CORES_STATUS.vencida} />
+      <View style={s.chipsRow}>
+        <StatChip label="Ativas" valor={counts.ativa} cor={CORES_STATUS.ativa} theme={theme} />
+        <StatChip label="A vencer" valor={counts.a_vencer} cor={CORES_STATUS.a_vencer} theme={theme} />
+        <StatChip label="Vencidas" valor={counts.vencida} cor={CORES_STATUS.vencida} theme={theme} />
       </View>
 
       {/* Filtros */}
-      <View style={styles.filtrosRow}>
+      <View style={s.filtrosRow}>
         {FILTROS.map(f => (
           <TouchableOpacity
             key={f}
-            style={[styles.filtroBotao, filtro === f && styles.filtroAtivo]}
+            style={[s.filtroBotao, filtro === f && s.filtroAtivo]}
             onPress={() => setFiltro(f)}
           >
-            <Text style={[styles.filtroTexto, filtro === f && styles.filtroTextoAtivo]}>{f}</Text>
+            <Text style={[s.filtroTexto, filtro === f && s.filtroTextoAtivo]}>{f}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -169,7 +172,7 @@ export default function DashboardScreen({ navigation }) {
       {carregando ? (
         <ActivityIndicator color="#E31E24" style={{ marginTop: 20 }} />
       ) : fichasFiltradas.length === 0 ? (
-        <Text style={styles.vazio}>Nenhuma ficha encontrada.</Text>
+        <Text style={s.vazio}>Nenhuma ficha encontrada.</Text>
       ) : (
         fichasFiltradas.map(ficha => {
           const aluno = alunosMap[ficha.alunoId];
@@ -182,53 +185,53 @@ export default function DashboardScreen({ navigation }) {
           return (
             <TouchableOpacity
               key={ficha.id}
-              style={styles.fichaCard}
+              style={s.fichaCard}
               onPress={() => aluno && navigation.navigate('Alunos', {
                 screen: 'PerfilAluno',
                 params: { aluno },
               })}
               activeOpacity={0.7}
             >
-              <View style={styles.cardTopo}>
-                <View style={[styles.avatar, { backgroundColor: avatarCor(aluno?.nome) }]}>
-                  <Text style={styles.avatarLetra}>{aluno?.nome?.[0]?.toUpperCase() || '?'}</Text>
+              <View style={s.cardTopo}>
+                <View style={[s.avatar, { backgroundColor: avatarCor(aluno?.nome) }]}>
+                  <Text style={s.avatarLetra}>{aluno?.nome?.[0]?.toUpperCase() || '?'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.alunoNome}>{aluno?.nome || 'Aluno'}</Text>
-                  <Text style={styles.fichaNome}>{ficha.nome}</Text>
+                  <Text style={s.alunoNome}>{aluno?.nome || 'Aluno'}</Text>
+                  <Text style={s.fichaNome}>{ficha.nome}</Text>
                 </View>
-                <View style={[styles.badge, { backgroundColor: cor + '20' }]}>
-                  <Text style={[styles.badgeTexto, { color: cor }]}>{LABELS_STATUS[ficha.status]}</Text>
+                <View style={[s.badge, { backgroundColor: cor + '20' }]}>
+                  <Text style={[s.badgeTexto, { color: cor }]}>{LABELS_STATUS[ficha.status]}</Text>
                 </View>
               </View>
 
               {/* Info: início / duração / vence em */}
-              <View style={styles.infoRow}>
+              <View style={s.infoRow}>
                 <InfoItem label="Início" valor={ficha.criadoEm?.toDate
-                  ? ficha.criadoEm.toDate().toLocaleDateString('pt-BR') : '—'} />
-                <InfoItem label="Duração" valor={ficha.semanas ? `${ficha.semanas * 7} dias` : '—'} />
+                  ? ficha.criadoEm.toDate().toLocaleDateString('pt-BR') : '—'} theme={theme} />
+                <InfoItem label="Duração" valor={ficha.semanas ? `${ficha.semanas * 7} dias` : '—'} theme={theme} />
                 <InfoItem label="Vence em" valor={ficha.dataVencimento?.toDate
-                  ? ficha.dataVencimento.toDate().toLocaleDateString('pt-BR') : '—'} />
+                  ? ficha.dataVencimento.toDate().toLocaleDateString('pt-BR') : '—'} theme={theme} />
               </View>
 
               {/* Barra de progresso */}
-              <View style={styles.progressoBg}>
-                <View style={[styles.progressoBar, { width: `${pct}%`, backgroundColor: cor }]} />
+              <View style={s.progressoBg}>
+                <View style={[s.progressoBar, { width: `${pct}%`, backgroundColor: cor }]} />
               </View>
-              <View style={styles.cardRodape}>
+              <View style={s.cardRodape}>
                 {ficha.fezHoje ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-                    <Text style={[styles.ultimoTreino, { color: '#16a34a', fontWeight: '600' }]}>
+                    <Text style={[s.ultimoTreino, { color: '#16a34a', fontWeight: '600' }]}>
                       Treinou hoje
                     </Text>
                   </View>
                 ) : (
-                  <Text style={styles.ultimoTreino}>
+                  <Text style={s.ultimoTreino}>
                     {ultimaData ? `Último treino ${tempoAtras(ultimaData)}` : 'Nenhum treino ainda'}
                   </Text>
                 )}
-                <Text style={styles.diasRestantes}>
+                <Text style={s.diasRestantes}>
                   {ficha.status === 'vencida' ? 'Vencida' : `${diasRestantes}d restantes`}
                 </Text>
               </View>
@@ -237,12 +240,12 @@ export default function DashboardScreen({ navigation }) {
         })
       )}
 
-      <LimparDemoBtn personalId={usuario.uid} onDone={() => setRefreshKey(k => k + 1)} />
+      <LimparDemoBtn personalId={usuario.uid} onDone={() => setRefreshKey(k => k + 1)} theme={theme} />
     </ScrollView>
   );
 }
 
-function LimparDemoBtn({ personalId, onDone }) {
+function LimparDemoBtn({ personalId, onDone, theme }) {
   const [limpando, setLimpando] = useState(false);
   const [ok, setOk] = useState(false);
 
@@ -250,7 +253,7 @@ function LimparDemoBtn({ personalId, onDone }) {
 
   return (
     <TouchableOpacity
-      style={styles.btnLimparDemo}
+      style={{ marginTop: 32, marginBottom: 40, alignItems: 'center', padding: 12 }}
       onPress={async () => {
         setLimpando(true);
         try {
@@ -266,65 +269,56 @@ function LimparDemoBtn({ personalId, onDone }) {
       disabled={limpando}
     >
       {limpando
-        ? <><ActivityIndicator color="#9ca3af" size="small" /><Text style={[styles.btnLimparDemoTexto, { marginLeft: 8 }]}>Removendo...</Text></>
-        : <Text style={styles.btnLimparDemoTexto}>Remover alunos de demonstração</Text>
+        ? <><ActivityIndicator color={theme.textTertiary} size="small" /><Text style={[{ color: theme.textTertiary, fontSize: 12 }, { marginLeft: 8 }]}>Removendo...</Text></>
+        : <Text style={{ color: theme.textTertiary, fontSize: 12 }}>Remover alunos de demonstração</Text>
       }
     </TouchableOpacity>
   );
 }
 
-function StatChip({ label, valor, cor }) {
+function StatChip({ label, valor, cor, theme }) {
   return (
-    <View style={[styles.chip, { borderColor: cor }]}>
-      <Text style={[styles.chipValor, { color: cor }]}>{valor}</Text>
-      <Text style={styles.chipLabel}>{label}</Text>
+    <View style={{ flex: 1, borderWidth: 1.5, borderColor: cor, borderRadius: 10, padding: 10, alignItems: 'center', backgroundColor: theme.surface }}>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: cor }}>{valor}</Text>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>{label}</Text>
     </View>
   );
 }
 
-function InfoItem({ label, valor }) {
+function InfoItem({ label, valor, theme }) {
   return (
     <View style={{ alignItems: 'center' }}>
-      <Text style={{ fontSize: 11, color: '#6b7280' }}>{label}</Text>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>{valor}</Text>
+      <Text style={{ fontSize: 11, color: theme.textSecondary }}>{label}</Text>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.textPrimary }}>{valor}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb', paddingHorizontal: 20, paddingTop: 60 },
-  header: { alignItems: 'center', marginBottom: 24 },
-  logo: { width: '100%', marginBottom: -200 , marginTop: -200 },
-  saudacao: { fontSize: 22, fontWeight: '700', color: '#111827', textAlign: 'right' },
-  subtitulo: { color: '#6b7280', fontSize: 13, marginTop: 2, textAlign: 'right' },
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 16, borderLeftWidth: 4, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  statValor: { fontSize: 32, fontWeight: '700', color: '#111827' },
-  statLabel: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  chipsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  chip: { flex: 1, borderWidth: 1.5, borderRadius: 10, padding: 10, alignItems: 'center', backgroundColor: '#fff' },
-  chipValor: { fontSize: 20, fontWeight: '700' },
-  chipLabel: { fontSize: 11, color: '#6b7280', marginTop: 2 },
-  filtrosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  filtroBotao: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  filtroAtivo: { backgroundColor: '#E31E24', borderColor: '#E31E24' },
-  filtroTexto: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  filtroTextoAtivo: { color: '#fff', fontWeight: '600' },
-  fichaCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  cardTopo: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  avatarLetra: { color: '#fff', fontWeight: '700', fontSize: 18 },
-  alunoNome: { fontWeight: '700', color: '#111827', fontSize: 15 },
-  fichaNome: { color: '#6b7280', fontSize: 13, marginTop: 2 },
-  badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  badgeTexto: { fontSize: 11, fontWeight: '700' },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6', marginBottom: 10 },
-  progressoBg: { height: 7, backgroundColor: '#f3f4f6', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-  progressoBar: { height: 7, borderRadius: 4 },
-  cardRodape: { flexDirection: 'row', justifyContent: 'space-between' },
-  ultimoTreino: { fontSize: 12, color: '#6b7280' },
-  diasRestantes: { fontSize: 12, color: '#9ca3af' },
-  vazio: { color: '#9ca3af', textAlign: 'center', marginTop: 20 },
-  btnLimparDemo: { marginTop: 32, marginBottom: 40, alignItems: 'center', padding: 12 },
-  btnLimparDemoTexto: { color: '#d1d5db', fontSize: 12, flexDirection: 'row', alignItems: 'center' },
-});
+function makeStyles(t) {
+  return {
+    container: { flex: 1, backgroundColor: t.bg, paddingHorizontal: 20, paddingTop: 60 },
+    header: { alignItems: 'center', marginBottom: 24 },
+    logo: { width: '100%', marginBottom: -200, marginTop: -200 },
+    chipsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    filtrosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+    filtroBotao: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: t.elevated, borderWidth: 1, borderColor: t.border },
+    filtroAtivo: { backgroundColor: t.red, borderColor: t.red },
+    filtroTexto: { fontSize: 13, color: t.textPrimary, fontWeight: '500' },
+    filtroTextoAtivo: { color: '#fff', fontWeight: '600' },
+    fichaCard: { backgroundColor: t.surface, borderRadius: 14, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+    cardTopo: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+    avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+    avatarLetra: { color: '#fff', fontWeight: '700', fontSize: 18 },
+    alunoNome: { fontWeight: '700', color: t.textPrimary, fontSize: 15 },
+    fichaNome: { color: t.textSecondary, fontSize: 13, marginTop: 2 },
+    badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+    badgeTexto: { fontSize: 11, fontWeight: '700' },
+    infoRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, borderTopWidth: 1, borderTopColor: t.border, marginBottom: 10 },
+    progressoBg: { height: 7, backgroundColor: t.elevated, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+    progressoBar: { height: 7, borderRadius: 4 },
+    cardRodape: { flexDirection: 'row', justifyContent: 'space-between' },
+    ultimoTreino: { fontSize: 12, color: t.textSecondary },
+    diasRestantes: { fontSize: 12, color: t.textTertiary },
+    vazio: { color: t.textTertiary, textAlign: 'center', marginTop: 20 },
+  };
+}
