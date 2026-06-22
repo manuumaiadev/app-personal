@@ -24,7 +24,16 @@
       }
     },
     "web": {
-      "favicon": "./assets/icon-app.png"
+      "favicon": "./assets/icon-app.png",
+      "bundler": "metro",
+      "name": "Personal App",
+      "shortName": "Personal",
+      "description": "App de personal trainer",
+      "backgroundColor": "#111111",
+      "themeColor": "#E31E24",
+      "display": "standalone",
+      "orientation": "portrait",
+      "lang": "pt-BR"
     },
     "plugins": [
       "expo-asset",

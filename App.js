@@ -4,9 +4,11 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import RootNavigator from './src/navigation';
 import { Asset } from 'expo-asset';
+import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { View, Image } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { Ionicons } from '@expo/vector-icons';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -25,6 +27,7 @@ const ASSETS = [
 ];
 
 async function precarregarAssets() {
+  await Font.loadAsync(Ionicons.font);
   const loaded = await Promise.all(
     ASSETS.map(m => Asset.fromModule(m).downloadAsync())
   );
