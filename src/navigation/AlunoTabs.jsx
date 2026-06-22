@@ -1,7 +1,11 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import useTabSwipe from './useTabSwipe';
+
+const ROUTES = ['Inicio', 'Treinos', 'Chat', 'Perfil'];
 
 import InicioScreen from '../screens/aluno/InicioScreen';
 import ExecutarTreinoScreen from '../screens/aluno/ExecutarTreinoScreen';
@@ -56,6 +60,23 @@ function ChatStack() {
   );
 }
 
+function SwipeInicioStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><InicioStack {...props} /></View>;
+}
+function SwipeTreinosStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><TreinosStack {...props} /></View>;
+}
+function SwipeChatStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><ChatStack {...props} /></View>;
+}
+function SwipePerfilStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><PerfilStack {...props} /></View>;
+}
+
 export default function AlunoTabs() {
   const { theme } = useTheme();
 
@@ -84,10 +105,10 @@ export default function AlunoTabs() {
         },
       })}
     >
-      <Tab.Screen name="Inicio" component={InicioStack} options={{ tabBarLabel: 'Inicio' }} />
-      <Tab.Screen name="Treinos" component={TreinosStack} options={{ tabBarLabel: 'Treinos' }} />
-      <Tab.Screen name="Chat" component={ChatStack} options={{ tabBarLabel: 'Chat' }} />
-      <Tab.Screen name="Perfil" component={PerfilStack} options={{ tabBarLabel: 'Perfil' }} />
+      <Tab.Screen name="Inicio" component={SwipeInicioStack} options={{ tabBarLabel: 'Inicio' }} />
+      <Tab.Screen name="Treinos" component={SwipeTreinosStack} options={{ tabBarLabel: 'Treinos' }} />
+      <Tab.Screen name="Chat" component={SwipeChatStack} options={{ tabBarLabel: 'Chat' }} />
+      <Tab.Screen name="Perfil" component={SwipePerfilStack} options={{ tabBarLabel: 'Perfil' }} />
     </Tab.Navigator>
   );
 }

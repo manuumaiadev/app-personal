@@ -1,7 +1,11 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import useTabSwipe from './useTabSwipe';
+
+const ROUTES = ['Dashboard', 'Alunos', 'MeuTreino', 'PerfilPersonal'];
 
 import DashboardScreen from '../screens/personal/DashboardScreen';
 import AlunosScreen from '../screens/personal/AlunosScreen';
@@ -58,6 +62,23 @@ function MeuTreinoStack() {
   );
 }
 
+function SwipeAlunosStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><AlunosStack {...props} /></View>;
+}
+function SwipeMeuTreinoStack(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><MeuTreinoStack {...props} /></View>;
+}
+function SwipeDashboard(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><DashboardScreen {...props} /></View>;
+}
+function SwipePerfilPersonal(props) {
+  const swipe = useTabSwipe(ROUTES);
+  return <View style={{ flex: 1 }} {...swipe.panHandlers}><PerfilPersonalScreen {...props} /></View>;
+}
+
 export default function PersonalTabs() {
   const { theme } = useTheme();
 
@@ -86,10 +107,10 @@ export default function PersonalTabs() {
         },
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Inicio' }} />
-      <Tab.Screen name="Alunos" component={AlunosStack} options={{ tabBarLabel: 'Alunos' }} />
-      <Tab.Screen name="MeuTreino" component={MeuTreinoStack} options={{ tabBarLabel: 'Meu Treino' }} />
-      <Tab.Screen name="PerfilPersonal" component={PerfilPersonalScreen} options={{ tabBarLabel: 'Perfil' }} />
+      <Tab.Screen name="Dashboard" component={SwipeDashboard} options={{ tabBarLabel: 'Inicio' }} />
+      <Tab.Screen name="Alunos" component={SwipeAlunosStack} options={{ tabBarLabel: 'Alunos' }} />
+      <Tab.Screen name="MeuTreino" component={SwipeMeuTreinoStack} options={{ tabBarLabel: 'Meu Treino' }} />
+      <Tab.Screen name="PerfilPersonal" component={SwipePerfilPersonal} options={{ tabBarLabel: 'Perfil' }} />
     </Tab.Navigator>
   );
 }
