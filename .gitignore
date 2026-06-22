@@ -34,9 +34,6 @@ yarn-error.*
 .env*.local
 .env
 
-# Firebase config — não subir para o GitHub
-src/services/firebase.js
-
 # typescript
 *.tsbuildinfo
 
