@@ -1,43 +1,26 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { listarFichasAluno } from '../../services/fichas';
-import { listarTreinosFicha } from '../../services/treinos';
 import { listarHistoricoAluno } from '../../services/execucoes';
 import { buscarNotas, salvarNotas } from '../../services/notas';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
-import { TIPOS_PERIOD } from '../../utils/periodizacao';
 
 const TABS = ['Fichas', 'Anamnese', 'Historico'];
-
-function calcularSemanaAtual(ficha) {
-  const inicio = ficha.criadoEm?.toDate?.();
-  if (!inicio) return 0;
-  const diff = Date.now() - inicio.getTime();
-  const idx = Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
-  return Math.max(0, Math.min(idx, (ficha.semanas || 1) - 1));
-}
-
-function normalizarPeriodo(item) {
-  if (!item) return null;
-  if (typeof item === 'string') {
-    const t = TIPOS_PERIOD.find(t => t.id === item);
-    return t ? { tipo: t.id, series: t.series, reps: t.reps, carga: t.carga } : null;
-  }
-  return item;
-}
 
 export default function PerfilAlunoScreen({ route, navigation }) {
   const { aluno } = route.params;
   const { usuario } = useAuth();
   const { theme } = useTheme();
-  const s = useMemo(() => makeStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme, insets), [theme, insets]);
   const scrollRef = useRef(null);
 
   const [aba, setAba] = useState('Fichas');
@@ -154,11 +137,14 @@ export default function PerfilAlunoScreen({ route, navigation }) {
 
           {/* FICHAS */}
           {aba === 'Fichas' && (
-            fichas.length === 0 ? (
-              <Text style={s.vazio}>Nenhuma ficha cadastrada.</Text>
-            ) : (
-              <>
-                {fichas.map(ficha => (
+            <>
+              {fichas.length === 0 ? (
+                <View style={s.fichasVazio}>
+                  <Ionicons name="document-outline" size={44} color={theme.textTertiary} />
+                  <Text style={s.vazio}>Nenhuma ficha cadastrada.</Text>
+                </View>
+              ) : (
+                fichas.map(ficha => (
                   <FichaCard
                     key={ficha.id}
                     ficha={ficha}
@@ -167,16 +153,16 @@ export default function PerfilAlunoScreen({ route, navigation }) {
                     navigation={navigation}
                     theme={theme}
                   />
-                ))}
-                <TouchableOpacity
-                  style={s.botaoNovaFicha}
-                  onPress={() => navigation.navigate('MontarTreino', { aluno })}
-                >
-                  <Ionicons name="add" size={18} color={theme.red} />
-                  <Text style={s.botaoNovaFichaTexto}>+ Nova ficha</Text>
-                </TouchableOpacity>
-              </>
-            )
+                ))
+              )}
+              <TouchableOpacity
+                style={s.botaoNovaFicha}
+                onPress={() => navigation.navigate('MontarTreino', { aluno })}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={theme.red} />
+                <Text style={s.botaoNovaFichaTexto}>Nova ficha</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           {/* ANAMNESE */}
@@ -286,49 +272,23 @@ export default function PerfilAlunoScreen({ route, navigation }) {
   );
 }
 
-// FichaCard
 function FichaCard({ ficha, aluno, isAtiva, navigation, theme }) {
   const fc = useMemo(() => makeFcStyles(theme), [theme]);
-  const [aberta, setAberta] = useState(isAtiva);
-  const [treinos, setTreinos] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [jaCarregou, setJaCarregou] = useState(false);
-
-  const semanaAtual = calcularSemanaAtual(ficha);
   const status = ficha.dataVencimento ? calcularStatusFicha(ficha.dataVencimento) : 'vencida';
   const cor = CORES_STATUS[status];
   const { pct } = ficha.criadoEm
     ? calcularProgresso(ficha.criadoEm, ficha.dataVencimento)
     : { pct: 0 };
 
-  useEffect(() => {
-    if (isAtiva) carregarTreinos();
-  }, []);
-
-  async function carregarTreinos() {
-    if (jaCarregou) return;
-    setCarregando(true);
-    try {
-      const ts = await listarTreinosFicha(ficha.id);
-      setTreinos(ts);
-      setJaCarregou(true);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  async function toggleAbrir() {
-    setAberta(prev => !prev);
-    if (!aberta && !jaCarregou) await carregarTreinos();
-  }
-
   return (
-    <View style={[fc.card, isAtiva && fc.cardAtivo]}>
-      <TouchableOpacity style={fc.cabecalho} onPress={toggleAbrir} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[fc.card, isAtiva && fc.cardAtivo]}
+      onPress={() => navigation.navigate('EditarFicha', { ficha, aluno })}
+      activeOpacity={0.75}
+    >
+      <View style={fc.cabecalho}>
         <View style={{ flex: 1, gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={fc.nome}>{ficha.nome}</Text>
             <View style={[fc.badge, { backgroundColor: cor + '20' }]}>
               <Text style={[fc.badgeTexto, { color: cor }]}>{LABELS_STATUS[status]}</Text>
@@ -336,79 +296,17 @@ function FichaCard({ ficha, aluno, isAtiva, navigation, theme }) {
           </View>
           <Text style={fc.datas}>
             {ficha.criadoEm?.toDate?.().toLocaleDateString('pt-BR') || '—'}
-            {' -> '}
+            {' → '}
             {ficha.dataVencimento?.toDate?.().toLocaleDateString('pt-BR') || '—'}
             {'  ·  '}{ficha.semanas} sem
           </Text>
         </View>
-        <Ionicons name={aberta ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textTertiary} />
-      </TouchableOpacity>
-
+        <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+      </View>
       <View style={fc.progressoBg}>
         <View style={[fc.progressoBar, { width: `${pct}%`, backgroundColor: cor }]} />
       </View>
-
-      {aberta && (
-        <View style={fc.treinosArea}>
-          {carregando ? (
-            <ActivityIndicator color="#E31E24" size="small" style={{ marginVertical: 14 }} />
-          ) : treinos.length === 0 ? (
-            <Text style={fc.vazio}>Nenhum treino nesta ficha.</Text>
-          ) : (
-            treinos.map(treino => {
-              const periodoAtual = normalizarPeriodo((treino.periodizacao || [])[semanaAtual]);
-              const tipoAtual = periodoAtual ? TIPOS_PERIOD.find(t => t.id === periodoAtual.tipo) : null;
-              return (
-                <TouchableOpacity
-                  key={treino.id}
-                  style={fc.treinoCard}
-                  onPress={() => navigation.navigate('EditarTreino', {
-                    treino, aluno, semanas: ficha.semanas || 4,
-                  })}
-                  activeOpacity={0.7}
-                >
-                  <View style={fc.treinoHeader}>
-                    <View style={fc.letraBadge}>
-                      <Text style={fc.letraTexto}>{treino.letra}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={fc.treinoNome}>Treino {treino.letra}</Text>
-                      {treino.diasDaSemana?.length > 0 && (
-                        <Text style={fc.treinoDias}>{treino.diasDaSemana.join(' · ')}</Text>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-                  </View>
-
-                  {tipoAtual && (
-                    <View style={[fc.periodBadge, { backgroundColor: tipoAtual.cor + '18', borderColor: tipoAtual.cor }]}>
-                      <Ionicons name={tipoAtual.icon} size={12} color={tipoAtual.cor} />
-                      <Text style={[fc.periodTexto, { color: tipoAtual.cor }]}>
-                        Semana {semanaAtual + 1} · {tipoAtual.label} · {periodoAtual.series}×{periodoAtual.reps} · {periodoAtual.carga}%
-                      </Text>
-                    </View>
-                  )}
-
-                  {treino.exercicios?.map((ex, i) => (
-                    <Text key={i} style={fc.exItem}>• {ex.nome} — {ex.series}×{ex.reps}</Text>
-                  ))}
-                </TouchableOpacity>
-              );
-            })
-          )}
-
-          {status !== 'ativa' && (
-            <TouchableOpacity
-              style={fc.btnRenovar}
-              onPress={() => navigation.navigate('RenovarFicha', { ficha, aluno })}
-            >
-              <Ionicons name="refresh-outline" size={14} color={theme.red} />
-              <Text style={fc.btnRenovarTexto}>Renovar ficha</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -443,10 +341,10 @@ function InfoLinha({ label, valor, theme }) {
 }
 
 // Estilos
-function makeStyles(t) {
+function makeStyles(t, insets) {
   return {
     container: { flex: 1, backgroundColor: t.bg },
-    navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14 },
+    navBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: (insets?.top || 0) + 10, paddingBottom: 14 },
     voltar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     voltarTexto: { color: t.red, fontSize: 15 },
     navTitulo: { fontWeight: '700', fontSize: 16, color: t.textPrimary },
@@ -470,9 +368,14 @@ function makeStyles(t) {
     exRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: t.border },
     exNome: { color: t.textPrimary, fontWeight: '500' },
     exCargas: { color: t.textSecondary, fontSize: 13 },
-    vazio: { textAlign: 'center', color: t.textTertiary, marginTop: 20 },
-    botaoNovaFicha: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderWidth: 1.5, borderColor: t.red, borderRadius: 10, marginTop: 4 },
-    botaoNovaFichaTexto: { color: t.red, fontWeight: '600', fontSize: 15 },
+    vazio: { textAlign: 'center', color: t.textTertiary, marginTop: 12 },
+    fichasVazio: { alignItems: 'center', paddingTop: 32, paddingBottom: 8, gap: 4 },
+    botaoNovaFicha: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      gap: 8, paddingVertical: 14, borderRadius: 12, marginTop: 8,
+      borderWidth: 1.5, borderColor: t.red,
+    },
+    botaoNovaFichaTexto: { color: t.red, fontWeight: '700', fontSize: 15 },
     expandBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4 },
     expandTexto: { fontSize: 13, fontWeight: '600', color: t.red },
     // Bloco de notas
@@ -498,26 +401,13 @@ function makeStyles(t) {
 function makeFcStyles(t) {
   return {
     card: { backgroundColor: t.surface, borderRadius: 14, padding: 14, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
-    cardAtivo: { borderWidth: 1.5, borderColor: t.red },
-    cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
+    cardAtivo: { borderWidth: 1, borderColor: t.red + '30' },
+    cabecalho: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
     nome: { fontWeight: '700', fontSize: 15, color: t.textPrimary },
     badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
     badgeTexto: { fontSize: 11, fontWeight: '700' },
     datas: { fontSize: 12, color: t.textSecondary },
-    progressoBg: { height: 5, backgroundColor: t.elevated, borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
+    progressoBg: { height: 5, backgroundColor: t.elevated, borderRadius: 3, overflow: 'hidden' },
     progressoBar: { height: 5, borderRadius: 3 },
-    treinosArea: { marginTop: 10, borderTopWidth: 1, borderTopColor: t.border, paddingTop: 10, gap: 10 },
-    treinoCard: { backgroundColor: t.elevated, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: t.border },
-    treinoHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-    letraBadge: { width: 36, height: 36, borderRadius: 8, backgroundColor: t.red, justifyContent: 'center', alignItems: 'center' },
-    letraTexto: { color: '#fff', fontWeight: '700', fontSize: 16 },
-    treinoNome: { fontWeight: '700', color: t.textPrimary, fontSize: 15 },
-    treinoDias: { color: t.textSecondary, fontSize: 12, marginTop: 2 },
-    exItem: { color: t.textPrimary, fontSize: 13, marginTop: 4, paddingLeft: 2 },
-    periodBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
-    periodTexto: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
-    vazio: { color: t.textTertiary, fontSize: 13, textAlign: 'center', paddingVertical: 12 },
-    btnRenovar: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1.5, borderColor: t.red, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, alignSelf: 'flex-start' },
-    btnRenovarTexto: { color: t.red, fontWeight: '600', fontSize: 13 },
   };
 }

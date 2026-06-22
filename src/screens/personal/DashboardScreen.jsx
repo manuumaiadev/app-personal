@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
 import { listarExecucoesRecentes, listarExecucoesHoje } from '../../services/execucoes';
-import { limparDadosFicticios } from '../../utils/seed';
 import { PERSONAL_ADMIN_ID } from '../../config/admin';
 import StatusBadge from '../../components/StatusBadge';
 
@@ -43,7 +42,6 @@ export default function DashboardScreen({ navigation }) {
   const [alunosAtivos, setAlunosAtivos] = useState(0);
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState('Todas');
-  const [refreshKey, setRefreshKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -124,7 +122,7 @@ export default function DashboardScreen({ navigation }) {
         }
       }
       carregar();
-    }, [refreshKey])
+    }, [])
   );
 
   const counts = {
@@ -141,8 +139,12 @@ export default function DashboardScreen({ navigation }) {
     <ScrollView style={s.container}>
       {/* Header */}
       <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerOla}>Olá, {usuario.nome?.split(' ')[0]}</Text>
+          <Text style={s.headerSub}>Visão geral dos seus alunos</Text>
+        </View>
         <Image
-          source={require('../../../assets/logo.png')}
+          source={require('../../../assets/minilogo.png')}
           style={s.logo}
           resizeMode="contain"
         />
@@ -240,47 +242,19 @@ export default function DashboardScreen({ navigation }) {
         })
       )}
 
-      <LimparDemoBtn personalId={usuario.uid} onDone={() => setRefreshKey(k => k + 1)} theme={theme} />
     </ScrollView>
-  );
-}
-
-function LimparDemoBtn({ personalId, onDone, theme }) {
-  const [limpando, setLimpando] = useState(false);
-  const [ok, setOk] = useState(false);
-
-  if (ok) return null;
-
-  return (
-    <TouchableOpacity
-      style={{ marginTop: 32, marginBottom: 40, alignItems: 'center', padding: 12 }}
-      onPress={async () => {
-        setLimpando(true);
-        try {
-          await limparDadosFicticios(personalId);
-          setOk(true);
-          onDone();
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setLimpando(false);
-        }
-      }}
-      disabled={limpando}
-    >
-      {limpando
-        ? <><ActivityIndicator color={theme.textTertiary} size="small" /><Text style={[{ color: theme.textTertiary, fontSize: 12 }, { marginLeft: 8 }]}>Removendo...</Text></>
-        : <Text style={{ color: theme.textTertiary, fontSize: 12 }}>Remover alunos de demonstração</Text>
-      }
-    </TouchableOpacity>
   );
 }
 
 function StatChip({ label, valor, cor, theme }) {
   return (
-    <View style={{ flex: 1, borderWidth: 1.5, borderColor: cor, borderRadius: 10, padding: 10, alignItems: 'center', backgroundColor: theme.surface }}>
-      <Text style={{ fontSize: 20, fontWeight: '700', color: cor }}>{valor}</Text>
-      <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>{label}</Text>
+    <View style={{
+      flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 8,
+      alignItems: 'center', backgroundColor: cor + '14',
+      borderWidth: 1, borderColor: cor + '40',
+    }}>
+      <Text style={{ fontSize: 26, fontWeight: '800', color: cor, letterSpacing: -0.5 }}>{valor}</Text>
+      <Text style={{ fontSize: 11, fontWeight: '600', color: theme.textSecondary, marginTop: 4, letterSpacing: 0.3 }}>{label}</Text>
     </View>
   );
 }
@@ -296,16 +270,22 @@ function InfoItem({ label, valor, theme }) {
 
 function makeStyles(t) {
   return {
-    container: { flex: 1, backgroundColor: t.bg, paddingHorizontal: 20, paddingTop: 60 },
-    header: { alignItems: 'center', marginBottom: 24 },
-    logo: { width: '100%', marginBottom: -200, marginTop: -200 },
-    chipsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    container: { flex: 1, backgroundColor: t.bg, paddingHorizontal: 24, paddingTop: 56 },
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingBottom: 20, marginBottom: 20,
+      borderBottomWidth: 1, borderBottomColor: t.border,
+    },
+    logo: { width: 52, height: 84 },
+    headerOla: { fontSize: 24, fontWeight: '800', color: t.textPrimary, letterSpacing: -0.3 },
+    headerSub: { fontSize: 13, color: t.textSecondary, marginTop: 3 },
+    chipsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
     filtrosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
     filtroBotao: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: t.elevated, borderWidth: 1, borderColor: t.border },
     filtroAtivo: { backgroundColor: t.red, borderColor: t.red },
     filtroTexto: { fontSize: 13, color: t.textPrimary, fontWeight: '500' },
     filtroTextoAtivo: { color: '#fff', fontWeight: '600' },
-    fichaCard: { backgroundColor: t.surface, borderRadius: 14, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+    fichaCard: { backgroundColor: t.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: t.border },
     cardTopo: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
     avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
     avatarLetra: { color: '#fff', fontWeight: '700', fontSize: 18 },
@@ -314,8 +294,8 @@ function makeStyles(t) {
     badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
     badgeTexto: { fontSize: 11, fontWeight: '700' },
     infoRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, borderTopWidth: 1, borderTopColor: t.border, marginBottom: 10 },
-    progressoBg: { height: 7, backgroundColor: t.elevated, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-    progressoBar: { height: 7, borderRadius: 4 },
+    progressoBg: { height: 5, backgroundColor: t.elevated, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+    progressoBar: { height: 5, borderRadius: 4 },
     cardRodape: { flexDirection: 'row', justifyContent: 'space-between' },
     ultimoTreino: { fontSize: 12, color: t.textSecondary },
     diasRestantes: { fontSize: 12, color: t.textTertiary },

@@ -11,6 +11,7 @@ import PerfilScreen from '../screens/aluno/PerfilScreen';
 import AnamneseScreen from '../screens/auth/AnamneseScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import ChatAlunoScreen from '../screens/chat/ChatAlunoScreen';
+import ExercicioAvulsoScreen from '../screens/aluno/ExercicioAvulsoScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -21,6 +22,7 @@ function InicioStack() {
       <Stack.Screen name="InicioAluno" component={InicioScreen} />
       <Stack.Screen name="VisualizarTreino" component={VisualizarTreinoScreen} />
       <Stack.Screen name="ExecutarTreino" component={ExecutarTreinoScreen} />
+      <Stack.Screen name="ExercicioAvulso" component={ExercicioAvulsoScreen} />
     </Stack.Navigator>
   );
 }
@@ -31,6 +33,7 @@ function TreinosStack() {
       <Stack.Screen name="TreinosList" component={TreinosScreen} />
       <Stack.Screen name="VisualizarTreino" component={VisualizarTreinoScreen} />
       <Stack.Screen name="ExecutarTreino" component={ExecutarTreinoScreen} />
+      <Stack.Screen name="ExercicioAvulso" component={ExercicioAvulsoScreen} />
     </Stack.Navigator>
   );
 }
@@ -65,7 +68,9 @@ export default function AlunoTabs() {
         tabBarStyle: {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
-          paddingBottom: 4,
+          height: 72,
+          paddingBottom: 12,
+          paddingTop: 10,
         },
         tabBarShowLabel: false,
         tabBarIcon: ({ color, size }) => {

@@ -11,6 +11,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { PERSONAL_ADMIN_ID } from '../config/admin';
 
 export async function criarExercicio(personalId, dados) {
   return addDoc(collection(db, 'exercicios'), {
@@ -21,9 +22,13 @@ export async function criarExercicio(personalId, dados) {
 }
 
 export async function listarExercicios(personalId) {
+  const ids = personalId === PERSONAL_ADMIN_ID
+    ? [personalId]
+    : [...new Set([personalId, PERSONAL_ADMIN_ID])];
+
   const q = query(
     collection(db, 'exercicios'),
-    where('personalId', '==', personalId)
+    where('personalId', 'in', ids)
   );
   const snap = await getDocs(q);
   return snap.docs

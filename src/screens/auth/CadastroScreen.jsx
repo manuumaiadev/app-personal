@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { cadastrar } from '../../services/auth';
-import { PERSONAL_ADMIN_ID } from '../../config/admin';
 import { useTheme } from '../../context/ThemeContext';
 
 function makeStyles(t) {
@@ -70,8 +69,7 @@ export default function CadastroScreen({ navigation }) {
     if (senha.length < 6) { setErro('Senha deve ter no minimo 6 caracteres.'); return; }
     setCarregando(true);
     try {
-      const dadosExtras = perfil === 'aluno' ? { personalId: PERSONAL_ADMIN_ID } : {};
-      const user = await cadastrar(email.trim(), senha, { nome, perfil, ...dadosExtras });
+      const user = await cadastrar(email.trim(), senha, { nome, perfil });
       setNovoUid(user.uid);
       setSucesso(true);
     } catch (e) {

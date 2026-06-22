@@ -1,22 +1,25 @@
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { criarExercicio } from '../../services/exercicios';
+import { criarExercicio, atualizarExercicio } from '../../services/exercicios';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
 const GRUPOS = ['Peito', 'Costas', 'Ombro', 'Bíceps', 'Tríceps', 'Abdômen', 'Glúteo', 'Quadríceps', 'Posterior', 'Panturrilha', 'Funcional'];
 const EQUIPAMENTOS = ['Barra', 'Halteres', 'Máquina', 'Cabo / Polia', 'Peso corporal', 'Elástico', 'Kettlebell', 'Smith'];
 
-export default function NovoExercicioScreen({ navigation }) {
+export default function NovoExercicioScreen({ route, navigation }) {
+  const exercicioExistente = route.params?.exercicio || null;
+  const modoEdicao = !!exercicioExistente;
+
   const { usuario } = useAuth();
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [nome, setNome] = useState('');
-  const [grupo, setGrupo] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [equipamento, setEquipamento] = useState('');
+  const [nome, setNome] = useState(exercicioExistente?.nome || '');
+  const [grupo, setGrupo] = useState(exercicioExistente?.grupoMuscular || '');
+  const [descricao, setDescricao] = useState(exercicioExistente?.descricao || '');
+  const [videoUrl, setVideoUrl] = useState(exercicioExistente?.videoUrl || '');
+  const [equipamento, setEquipamento] = useState(exercicioExistente?.equipamento || '');
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [erro, setErro] = useState('');
@@ -28,7 +31,11 @@ export default function NovoExercicioScreen({ navigation }) {
     if (!nome || !grupo) { setErro('Preencha nome e grupo muscular.'); return; }
     setCarregando(true);
     try {
-      await criarExercicio(usuario.uid, { nome, grupoMuscular: grupo, descricao, videoUrl, equipamento });
+      if (modoEdicao) {
+        await atualizarExercicio(exercicioExistente.id, { nome, grupoMuscular: grupo, descricao, videoUrl, equipamento });
+      } else {
+        await criarExercicio(usuario.uid, { nome, grupoMuscular: grupo, descricao, videoUrl, equipamento });
+      }
       setSucesso(true);
     } catch (e) {
       setErro('Não foi possível salvar.');
@@ -42,7 +49,7 @@ export default function NovoExercicioScreen({ navigation }) {
       <Modal visible={sucesso} transparent animationType="fade">
         <View style={s.overlay}>
           <View style={s.modalBox}>
-            <Text style={s.modalTitulo}>Exercício salvo!</Text>
+            <Text style={s.modalTitulo}>{modoEdicao ? 'Exercício atualizado!' : 'Exercício salvo!'}</Text>
             <TouchableOpacity style={s.modalBotao} onPress={() => { setSucesso(false); navigation.goBack(); }}>
               <Text style={s.modalBotaoTexto}>OK</Text>
             </TouchableOpacity>
@@ -55,7 +62,7 @@ export default function NovoExercicioScreen({ navigation }) {
           <Ionicons name="arrow-back" size={22} color={theme.red} />
           <Text style={s.voltarTexto}>Voltar</Text>
         </TouchableOpacity>
-        <Text style={s.titulo}>Novo Exercício</Text>
+        <Text style={s.titulo}>{modoEdicao ? 'Editar Exercício' : 'Novo Exercício'}</Text>
 
         {!!erro && <Text style={s.erro}>{erro}</Text>}
 

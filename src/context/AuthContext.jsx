@@ -4,8 +4,6 @@ import { doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { PERSONAL_ADMIN_ID } from '../config/admin';
 
-const PERSONAL_ADMIN_EMAIL = 'manuumaia96@gmail.com';
-
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
@@ -20,12 +18,10 @@ export function AuthProvider({ children }) {
           const snap = await getDoc(ref);
           const dados = snap.data() || {};
 
-          // Admin sempre é personal, independente do que está no Firestore
-          const isAdmin = user.uid === PERSONAL_ADMIN_ID || user.email === PERSONAL_ADMIN_EMAIL;
+          const isAdmin = user.uid === PERSONAL_ADMIN_ID;
           if (isAdmin) {
             dados.perfil = 'personal';
             delete dados.personalId;
-            // Tenta corrigir no banco também (silenciosamente)
             updateDoc(ref, { perfil: 'personal', personalId: deleteField() }).catch(() => {});
           }
 

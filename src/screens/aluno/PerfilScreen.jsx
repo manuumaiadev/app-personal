@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
   TextInput, ActivityIndicator, Alert, Modal, Switch,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { criarSolicitacao, verificarSolicitacaoExistente } from '../../services/solicitacoes';
-import { reautenticar, alterarEmail, alterarSenha } from '../../services/auth';
+import { reautenticar, alterarEmail, alterarSenha, excluirConta } from '../../services/auth';
+import { escolherFoto, uploadFotoPerfil } from '../../services/fotoService';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
@@ -16,7 +18,7 @@ const CORES_AVATAR = ['#E31E24', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#d
 function makeStyles(t) {
   return {
     scroll: { flex: 1, backgroundColor: t.bg },
-    container: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 50 },
+    container: { paddingTop: 80, paddingHorizontal: 16, paddingBottom: 50 },
     avatarSection: { alignItems: 'center', marginBottom: 24 },
     avatar: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
     avatarLetra: { color: '#fff', fontWeight: '800', fontSize: 34 },
@@ -48,8 +50,14 @@ function makeStyles(t) {
     statValor: { fontSize: 20, fontWeight: '800', color: t.red },
     statLabel: { fontSize: 11, color: t.textSecondary, marginTop: 2 },
     semDados: { fontSize: 13, color: t.textSecondary, textAlign: 'center', paddingVertical: 8 },
-    vinculoDesc: { fontSize: 13, color: t.textSecondary, marginBottom: 10 },
+    vinculoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderTopWidth: 1, borderTopColor: t.border, marginTop: 4 },
+    vinculoIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#22c55e18', justifyContent: 'center', alignItems: 'center' },
+    vinculoNome: { fontSize: 14, fontWeight: '600', color: t.textPrimary },
+    vinculoSubtitulo: { fontSize: 12, color: '#22c55e', fontWeight: '500', marginTop: 1 },
+    vinculoDesc: { fontSize: 13, color: t.textSecondary, marginBottom: 12, marginTop: 8 },
     vinculoInput: { backgroundColor: t.inputBg, borderWidth: 1, borderColor: t.inputBorder, borderRadius: 10, padding: 12, fontSize: 14, color: t.textPrimary, marginBottom: 10 },
+    cancelarVinculoBtn: { paddingTop: 4, paddingBottom: 2, alignSelf: 'flex-end' },
+    cancelarVinculoTexto: { fontSize: 12, color: t.textTertiary, textDecorationLine: 'underline' },
     msg: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 8, padding: 10, marginBottom: 10 },
     msgTexto: { fontSize: 13, fontWeight: '500', flex: 1 },
     modalSheet: { backgroundColor: t.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, borderTopWidth: 1, borderColor: t.border },
@@ -58,8 +66,20 @@ function makeStyles(t) {
     acessoLabel: { fontSize: 11, color: t.textSecondary, fontWeight: '600' },
     acessoValor: { fontSize: 14, color: t.textPrimary, fontWeight: '500', marginTop: 1 },
     acessoDivisor: { height: 1, backgroundColor: t.border },
-    botaoSair: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, padding: 14 },
-    botaoSairTexto: { color: '#ef4444', fontWeight: '600', fontSize: 15 },
+    topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', width: '100%', marginBottom: 4 },
+    logoutBtn: { padding: 6 },
+    botaoExcluir: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+    botaoExcluirTexto: { color: t.textTertiary, fontSize: 13, textDecorationLine: 'underline' },
+    modalOverlay2: { flex: 1, backgroundColor: '#00000088', justifyContent: 'center', alignItems: 'center', padding: 24 },
+    modalBox2: { backgroundColor: t.surface, borderRadius: 16, padding: 24, width: '100%' },
+    modalTitulo2: { fontSize: 17, fontWeight: '700', color: t.textPrimary, marginBottom: 6 },
+    modalDesc2: { fontSize: 13, color: t.textSecondary, marginBottom: 16, lineHeight: 18 },
+    modalInput2: { backgroundColor: t.elevated, borderRadius: 10, borderWidth: 1, borderColor: t.inputBorder, padding: 12, fontSize: 15, color: t.textPrimary, marginBottom: 20 },
+    modalBotoes2: { flexDirection: 'row', gap: 12 },
+    modalCancelar2: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: t.border, alignItems: 'center' },
+    modalCancelarTexto2: { color: t.textSecondary, fontWeight: '600' },
+    modalConfirmar2: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center' },
+    modalConfirmarTexto2: { color: '#fff', fontWeight: '700' },
     toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     toggleTexto: { fontSize: 15, fontWeight: '600', color: t.textPrimary },
@@ -124,6 +144,27 @@ export default function PerfilScreen({ navigation }) {
   const [codigoPersonal, setCodigoPersonal] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [msgVinculo, setMsgVinculo] = useState(null);
+
+  const [excluindo, setExcluindo] = useState(false);
+  const [modalExcluir, setModalExcluir] = useState(false);
+  const [senhaExcluir, setSenhaExcluir] = useState('');
+
+  const [modalCancelarVinculo, setModalCancelarVinculo] = useState(false);
+  const [cancelandoVinculo, setCancelandoVinculo] = useState(false);
+
+  const [nomePersonal, setNomePersonal] = useState('');
+  const [uploadandoFoto, setUploadandoFoto] = useState(false);
+
+  useEffect(() => {
+    if (!usuario?.personalId) { setNomePersonal(''); return; }
+    getDoc(doc(db, 'users', usuario.personalId))
+      .then(snap => {
+        const d = snap.data() || {};
+        const nome = [d.nome, d.sobrenome].filter(Boolean).join(' ');
+        setNomePersonal(nome);
+      })
+      .catch(() => {});
+  }, [usuario?.personalId]);
 
   async function salvarPerfil() {
     if (!nome.trim()) { Alert.alert('Atencao', 'O nome nao pode ficar vazio.'); return; }
@@ -215,22 +256,81 @@ export default function PerfilScreen({ navigation }) {
     }
   }
 
+  async function handleAlterarFoto() {
+    try {
+      const uri = await escolherFoto();
+      if (!uri) return;
+      setUploadandoFoto(true);
+      const url = await uploadFotoPerfil(usuario.uid, uri);
+      await atualizarUsuario({ fotoUrl: url });
+    } catch (e) {
+      if (e.message !== 'permissao_negada') Alert.alert('Erro', 'Nao foi possivel atualizar a foto.');
+    } finally {
+      setUploadandoFoto(false);
+    }
+  }
+
+  async function handleCancelarVinculo() {
+    setCancelandoVinculo(true);
+    try {
+      await updateDoc(doc(db, 'users', usuario.uid), { personalId: null });
+      await atualizarUsuario({ personalId: null });
+      setNomePersonal('');
+      setModalCancelarVinculo(false);
+    } catch {
+      Alert.alert('Erro', 'Nao foi possivel cancelar o vinculo. Tente novamente.');
+    } finally {
+      setCancelandoVinculo(false);
+    }
+  }
+
+  function handleExcluirConta() {
+    setSenhaExcluir('');
+    setModalExcluir(true);
+  }
+
+  async function confirmarExclusao() {
+    if (!senhaExcluir) return;
+    setExcluindo(true);
+    setModalExcluir(false);
+    try {
+      await reautenticar(senhaExcluir);
+      await excluirConta();
+    } catch (e) {
+      setExcluindo(false);
+      Alert.alert('Erro', e.code === 'auth/wrong-password' ? 'Senha incorreta.' : 'Nao foi possivel excluir a conta. Tente novamente.');
+    }
+  }
+
   const avatarCor = usuario?.corAvatar || CORES_AVATAR[0];
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={s.container}>
+    <View style={s.scroll}>
+    <ScrollView contentContainerStyle={s.container}>
+
+      {/* Logout topo */}
+      <View style={s.topRow}>
+        <TouchableOpacity onPress={logout} style={s.logoutBtn}>
+          <Ionicons name="log-out-outline" size={22} color={theme.red} />
+        </TouchableOpacity>
+      </View>
 
       {/* Avatar */}
       <View style={s.avatarSection}>
-        <TouchableOpacity onPress={() => editandoPerfil && setModalCor(true)} activeOpacity={editandoPerfil ? 0.7 : 1}>
-          <View style={[s.avatar, { backgroundColor: avatarCor }]}>
-            <Text style={s.avatarLetra}>{usuario?.nome?.[0]?.toUpperCase()}</Text>
-          </View>
-          {editandoPerfil && (
-            <View style={s.avatarEdit}>
-              <Ionicons name="color-palette-outline" size={13} color={theme.textPrimary} />
+        <TouchableOpacity onPress={handleAlterarFoto} activeOpacity={0.8} disabled={uploadandoFoto}>
+          {usuario?.fotoUrl ? (
+            <Image source={{ uri: usuario.fotoUrl }} style={[s.avatar, { backgroundColor: avatarCor }]} />
+          ) : (
+            <View style={[s.avatar, { backgroundColor: avatarCor }]}>
+              <Text style={s.avatarLetra}>{usuario?.nome?.[0]?.toUpperCase()}</Text>
             </View>
           )}
+          <View style={s.avatarEdit}>
+            {uploadandoFoto
+              ? <ActivityIndicator size="small" color={theme.textPrimary} />
+              : <Ionicons name="camera-outline" size={13} color={theme.textPrimary} />
+            }
+          </View>
         </TouchableOpacity>
         <Text style={s.nome}>{usuario?.nome}</Text>
         <Text style={s.email}>{usuario?.email}</Text>
@@ -352,8 +452,8 @@ export default function PerfilScreen({ navigation }) {
           <View style={s.toggleLeft}>
             <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={theme.textSecondary} />
             <View>
-              <Text style={s.toggleTexto}>Modo escuro</Text>
-              <Text style={s.toggleSub}>{isDark ? 'Interface escura ativa' : 'Interface clara ativa'}</Text>
+              <Text style={s.toggleTexto}>{isDark ? 'Modo escuro' : 'Modo claro'}</Text>
+              <Text style={s.toggleSub}>{isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro'}</Text>
             </View>
           </View>
           <Switch
@@ -455,49 +555,122 @@ export default function PerfilScreen({ navigation }) {
       </View>
 
       {/* Vinculo */}
-      {!usuario?.personalId ? (
-        <View style={s.secao}>
-          <Text style={s.secaoTitulo}>Vincular personal</Text>
-          <Text style={s.vinculoDesc}>Informe o codigo do seu personal trainer.</Text>
-          <TextInput
-            style={s.vinculoInput}
-            placeholder="Cole o codigo aqui..."
-            placeholderTextColor={theme.placeholder}
-            value={codigoPersonal}
-            onChangeText={setCodigoPersonal}
-            autoCapitalize="none"
-          />
-          {msgVinculo && (
-            <View style={[s.msg, { backgroundColor: msgVinculo.tipo === 'sucesso' ? '#dcfce7' : '#fee2e2' }]}>
-              <Ionicons name={msgVinculo.tipo === 'sucesso' ? 'checkmark-circle' : 'alert-circle'} size={15}
-                color={msgVinculo.tipo === 'sucesso' ? '#16a34a' : '#dc2626'} />
-              <Text style={[s.msgTexto, { color: msgVinculo.tipo === 'sucesso' ? '#16a34a' : '#dc2626' }]}>
-                {msgVinculo.texto}
-              </Text>
+      <View style={s.secao}>
+        <Text style={s.secaoTitulo}>Personal trainer</Text>
+        {usuario?.personalId ? (
+          <>
+            <View style={s.vinculoRow}>
+              <View style={s.vinculoIconBox}>
+                <Ionicons name="person-outline" size={18} color="#22c55e" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.vinculoNome}>{nomePersonal || 'Personal vinculado'}</Text>
+                <Text style={s.vinculoSubtitulo}>Vinculado</Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
             </View>
-          )}
-          <TouchableOpacity
-            style={[s.salvarBtn, { borderRadius: 10, padding: 13 }, !codigoPersonal.trim() && { opacity: 0.4 }]}
-            onPress={handleSolicitarVinculo}
-            disabled={enviando || !codigoPersonal.trim()}
-          >
-            {enviando ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.salvarBtnTexto}>Solicitar vinculo</Text>}
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={[s.secao, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
-          <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-          <Text style={{ color: theme.textPrimary, fontSize: 14, fontWeight: '500' }}>Vinculado ao seu personal trainer</Text>
-        </View>
-      )}
+            <TouchableOpacity
+              style={s.cancelarVinculoBtn}
+              onPress={() => setModalCancelarVinculo(true)}
+            >
+              <Text style={s.cancelarVinculoTexto}>Cancelar vinculo</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={s.vinculoDesc}>Informe o codigo do seu personal trainer.</Text>
+            <TextInput
+              style={s.vinculoInput}
+              placeholder="Cole o codigo aqui..."
+              placeholderTextColor={theme.placeholder}
+              value={codigoPersonal}
+              onChangeText={setCodigoPersonal}
+              autoCapitalize="none"
+            />
+            {msgVinculo && (
+              <View style={[s.msg, { backgroundColor: msgVinculo.tipo === 'sucesso' ? '#dcfce7' : '#fee2e2' }]}>
+                <Ionicons name={msgVinculo.tipo === 'sucesso' ? 'checkmark-circle' : 'alert-circle'} size={15}
+                  color={msgVinculo.tipo === 'sucesso' ? '#16a34a' : '#dc2626'} />
+                <Text style={[s.msgTexto, { color: msgVinculo.tipo === 'sucesso' ? '#16a34a' : '#dc2626' }]}>
+                  {msgVinculo.texto}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[s.salvarBtn, { borderRadius: 10, padding: 13 }, !codigoPersonal.trim() && { opacity: 0.4 }]}
+              onPress={handleSolicitarVinculo}
+              disabled={enviando || !codigoPersonal.trim()}
+            >
+              {enviando ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.salvarBtnTexto}>Solicitar vinculo</Text>}
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
-      {/* Logout */}
-      <TouchableOpacity style={s.botaoSair} onPress={logout}>
-        <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-        <Text style={s.botaoSairTexto}>Sair da conta</Text>
+      {/* Excluir conta */}
+      <TouchableOpacity style={s.botaoExcluir} onPress={handleExcluirConta} disabled={excluindo}>
+        {excluindo
+          ? <ActivityIndicator size="small" color={theme.textTertiary} />
+          : <Text style={s.botaoExcluirTexto}>Excluir conta</Text>
+        }
       </TouchableOpacity>
     </ScrollView>
+
+    {/* Modal cancelar vinculo */}
+    <Modal visible={modalCancelarVinculo} transparent animationType="fade" onRequestClose={() => setModalCancelarVinculo(false)}>
+      <View style={s.modalOverlay2}>
+        <View style={s.modalBox2}>
+          <Text style={s.modalTitulo2}>Cancelar vinculo</Text>
+          <Text style={s.modalDesc2}>
+            Tem certeza que deseja cancelar o vinculo com {nomePersonal || 'seu personal'}? Voce podera solicitar um novo vinculo depois.
+          </Text>
+          <View style={s.modalBotoes2}>
+            <TouchableOpacity style={s.modalCancelar2} onPress={() => setModalCancelarVinculo(false)}>
+              <Text style={s.modalCancelarTexto2}>Voltar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.modalConfirmar2, cancelandoVinculo && { opacity: 0.6 }]}
+              onPress={handleCancelarVinculo}
+              disabled={cancelandoVinculo}
+            >
+              {cancelandoVinculo
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.modalConfirmarTexto2}>Cancelar vinculo</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Modal excluir conta */}
+    <Modal visible={modalExcluir} transparent animationType="fade" onRequestClose={() => setModalExcluir(false)}>
+      <KeyboardAvoidingView style={s.modalOverlay2} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={s.modalBox2}>
+          <Text style={s.modalTitulo2}>Excluir conta</Text>
+          <Text style={s.modalDesc2}>Esta acao e irreversivel. Digite sua senha para confirmar.</Text>
+          <TextInput
+            style={s.modalInput2}
+            secureTextEntry
+            placeholder="Senha"
+            placeholderTextColor={theme.placeholder}
+            value={senhaExcluir}
+            onChangeText={setSenhaExcluir}
+            autoFocus
+          />
+          <View style={s.modalBotoes2}>
+            <TouchableOpacity style={s.modalCancelar2} onPress={() => setModalExcluir(false)}>
+              <Text style={s.modalCancelarTexto2}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.modalConfirmar2, !senhaExcluir && { opacity: 0.4 }]} onPress={confirmarExclusao} disabled={!senhaExcluir}>
+              <Text style={s.modalConfirmarTexto2}>Excluir</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+    </View>
   );
 }
 

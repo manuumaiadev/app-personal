@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, Pressable, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { listarFichasAluno } from '../../services/fichas';
@@ -131,7 +131,7 @@ function makeDash(t) {
   };
 }
 
-function makeScreenStyles(t) {
+function makeStyles(t) {
   return {
     container: { flex: 1, backgroundColor: t.bg },
     content: { paddingHorizontal: 24, paddingTop: 56, paddingBottom: 48 },
@@ -141,13 +141,21 @@ function makeScreenStyles(t) {
       paddingBottom: 20, marginBottom: 20,
       borderBottomWidth: 1, borderBottomColor: t.border,
     },
-    cumprimento: { fontSize: 13, color: t.textSecondary, marginBottom: 2 },
-    nome: { fontSize: 24, fontWeight: '800', color: t.textPrimary, letterSpacing: -0.3 },
+    headerLeft: { flex: 1 },
+    titulo: { fontSize: 24, fontWeight: '800', color: t.textPrimary, letterSpacing: -0.3 },
     subtitulo: { fontSize: 13, color: t.textSecondary, marginTop: 3 },
-    iconBadge: { width: 52, height: 84 },
-    semFicha: { alignItems: 'center', paddingTop: 60, gap: 10 },
+    novaFichaBtn: {
+      width: 38, height: 38, borderRadius: 19,
+      backgroundColor: t.red, justifyContent: 'center', alignItems: 'center',
+    },
+    semFicha: { alignItems: 'center', paddingTop: 40, gap: 10 },
     semFichaTexto: { fontSize: 16, fontWeight: '600', color: t.textSecondary, textAlign: 'center' },
     semFichaSubtitulo: { fontSize: 13, color: t.textTertiary, textAlign: 'center' },
+    semFichaBotao: {
+      marginTop: 8, backgroundColor: t.red, paddingHorizontal: 20,
+      paddingVertical: 11, borderRadius: 12,
+    },
+    semFichaBotaoTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
     fichaCard: { backgroundColor: t.surface, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: t.border },
     fichaTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
     fichaNome: { fontSize: 17, fontWeight: '700', color: t.textPrimary, marginBottom: 3 },
@@ -256,10 +264,10 @@ function Dashboard({ historico }) {
   );
 }
 
-export default function InicioScreen({ navigation }) {
+export default function MeuTreinoScreen({ navigation }) {
   const { usuario } = useAuth();
   const { theme: C } = useTheme();
-  const s = useMemo(() => makeScreenStyles(C), [C]);
+  const s = useMemo(() => makeStyles(C), [C]);
   const [fichasComTreinos, setFichasComTreinos] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -310,33 +318,37 @@ export default function InicioScreen({ navigation }) {
     }, [])
   );
 
+  function irParaNovaFicha() {
+    navigation.navigate('MontarTreino', { aluno: { id: usuario.uid, nome: usuario.nome } });
+  }
+
   if (carregando) {
     return <View style={s.center}><ActivityIndicator color={C.red} size="large" /></View>;
   }
-
-  const hora = new Date().getHours();
-  const cumprimento = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
-  const primeiroNome = usuario?.nome?.split(' ')[0] || '';
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
 
       <View style={s.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.cumprimento}>{cumprimento},</Text>
-          <Text style={s.nome}>{primeiroNome}</Text>
-          <Text style={s.subtitulo}>Sua ficha ativa</Text>
+        <View style={s.headerLeft}>
+          <Text style={s.titulo}>Meu Treino</Text>
+          <Text style={s.subtitulo}>Seu progresso pessoal</Text>
         </View>
-        <Image source={require('../../../assets/minilogo.png')} style={s.iconBadge} resizeMode="contain" />
+        <TouchableOpacity style={s.novaFichaBtn} onPress={irParaNovaFicha}>
+          <Ionicons name="add" size={22} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <Dashboard historico={historico} />
 
       {fichasComTreinos.length === 0 ? (
         <View style={s.semFicha}>
-          <Ionicons name="document-text-outline" size={52} color={C.textTertiary} />
+          <Ionicons name="barbell-outline" size={52} color={C.textTertiary} />
           <Text style={s.semFichaTexto}>Nenhuma ficha ativa.</Text>
-          <Text style={s.semFichaSubtitulo}>Aguarde seu personal trainer criar sua ficha.</Text>
+          <Text style={s.semFichaSubtitulo}>Crie sua primeira ficha para comecar a treinar.</Text>
+          <TouchableOpacity style={s.semFichaBotao} onPress={irParaNovaFicha}>
+            <Text style={s.semFichaBotaoTexto}>Criar ficha</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         fichasComTreinos.map(ficha => {
@@ -430,7 +442,6 @@ export default function InicioScreen({ navigation }) {
           );
         })
       )}
-
     </ScrollView>
   );
 }

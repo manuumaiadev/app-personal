@@ -83,7 +83,7 @@ export default function DetalheExercicioScreen({ route, navigation }) {
       <View style={s.footer}>
         <TouchableOpacity
           style={[s.botao, { backgroundColor: theme.elevated, flex: 1 }]}
-          onPress={() => navigation.navigate('NovoExercicio')}
+          onPress={() => navigation.navigate('NovoExercicio', { exercicio })}
         >
           <Text style={[s.botaoTexto, { color: theme.textPrimary }]}>Editar</Text>
         </TouchableOpacity>

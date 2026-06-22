@@ -7,8 +7,9 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  deleteUser,
 } from 'firebase/auth';
-import { doc, setDoc, getFirestore } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, getFirestore } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { auth, db } from './firebase';
 import { firebaseConfig } from './firebase';
@@ -44,6 +45,13 @@ export async function alterarEmail(novoEmail) {
 
 export async function alterarSenha(novaSenha) {
   await updatePassword(auth.currentUser, novaSenha);
+}
+
+export async function excluirConta() {
+  const user = auth.currentUser;
+  if (!user) return;
+  await deleteDoc(doc(db, 'users', user.uid));
+  await deleteUser(user);
 }
 
 // Cria conta de aluno sem deslogar o personal — usa app secundário

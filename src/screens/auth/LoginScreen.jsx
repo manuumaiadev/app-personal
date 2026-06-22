@@ -7,7 +7,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { login } from '../../services/auth';
 import { auth } from '../../services/firebase';
-import { useTheme } from '../../context/ThemeContext';
+import { LIGHT } from '../../context/ThemeContext';
 
 function makeStyles(t) {
   return {
@@ -40,8 +40,8 @@ function makeStyles(t) {
 }
 
 export default function LoginScreen({ navigation }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeStyles(theme), [theme]);
+  const theme = LIGHT;
+  const s = useMemo(() => makeStyles(LIGHT), []);
 
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
