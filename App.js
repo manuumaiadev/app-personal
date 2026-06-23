@@ -6,7 +6,8 @@ import RootNavigator from './src/navigation';
 import { Asset } from 'expo-asset';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { View, Image, Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -81,7 +82,7 @@ export default function App() {
   if (!pronto) return null;
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <ThemeProvider>
         <AuthProvider>
           <NavigationContainer ref={navigationRef}>
@@ -90,6 +91,6 @@ export default function App() {
           </NavigationContainer>
         </AuthProvider>
       </ThemeProvider>
-    </View>
+    </GestureHandlerRootView>
   );
 }

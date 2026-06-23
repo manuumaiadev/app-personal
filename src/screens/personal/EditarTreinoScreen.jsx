@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, FlatList, Modal,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { atualizarTreino } from '../../services/treinos';
@@ -49,20 +50,17 @@ export default function EditarTreinoScreen({ route, navigation }) {
     setDiasDaSemana(prev => prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia]);
   }
 
-  function atualizarEx(i, campo, valor) {
-    setExercicios(prev => { const n = [...prev]; n[i] = { ...n[i], [campo]: valor }; return n; });
+  function atualizarEx(exId, campo, valor) {
+    setExercicios(prev => prev.map(e => e.id === exId ? { ...e, [campo]: valor } : e));
   }
 
-  function removerEx(i) {
-    const exId = exercicios[i]?.id;
-    setExercicios(prev => prev.filter((_, j) => j !== i));
-    if (exId) {
-      setMetodosEspeciais(prev =>
-        prev
-          .map(g => ({ ...g, exercicioIds: g.exercicioIds.filter(id => id !== exId) }))
-          .filter(g => g.exercicioIds.length > 0)
-      );
-    }
+  function removerEx(exId) {
+    setExercicios(prev => prev.filter(e => e.id !== exId));
+    setMetodosEspeciais(prev =>
+      prev
+        .map(g => ({ ...g, exercicioIds: g.exercicioIds.filter(id => id !== exId) }))
+        .filter(g => g.exercicioIds.length > 0)
+    );
   }
 
   function adicionarExercicio(ex) {
@@ -152,84 +150,94 @@ export default function EditarTreinoScreen({ route, navigation }) {
 
         {/* Exercícios */}
         <Text style={[s.secTitulo, { marginTop: 24 }]}>EXERCÍCIOS</Text>
-        {(() => {
-          const exMetodoMap = {};
-          metodosEspeciais.forEach(g => {
-            const def = metodoById(g.metodo);
-            if (def) g.exercicioIds.forEach(id => { exMetodoMap[id] = def; });
-          });
-          return exercicios.map((ex, i) => {
+        <DraggableFlatList
+          data={exercicios}
+          keyExtractor={ex => ex.id}
+          scrollEnabled={false}
+          onDragEnd={({ data }) => setExercicios(data)}
+          renderItem={({ item: ex, drag, isActive, getIndex }) => {
+            const i = getIndex();
+            const exMetodoMap = {};
+            metodosEspeciais.forEach(g => {
+              const def = metodoById(g.metodo);
+              if (def) g.exercicioIds.forEach(id => { exMetodoMap[id] = def; });
+            });
             const metodo = exMetodoMap[ex.id];
             return (
-              <View key={ex.id ?? i} style={s.exCard}>
-                <View style={s.exCardTopo}>
-                  <View style={[s.exNum, metodo && { backgroundColor: metodo.cor }]}>
-                    <Text style={s.exNumTexto}>{i + 1}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.exNome}>{ex.nome}</Text>
-                    {metodo && (
-                      <View style={[s.metodoBadge, { backgroundColor: metodo.cor + '20', borderColor: metodo.cor + '60', marginTop: 4 }]}>
-                        <Text style={[s.metodoBadgeTexto, { color: metodo.cor }]}>{metodo.label}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    style={s.exEditBtn}
-                    onPress={() => navigation.navigate('NovoExercicio', { exercicio: ex })}
-                  >
-                    <Ionicons name="pencil-outline" size={15} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[s.exInputs, { marginTop: 12 }]}>
-                  <TextInput style={s.miniInput} placeholder="Séries" keyboardType="numeric"
-                    value={String(ex.series)} onChangeText={v => atualizarEx(i, 'series', v)} />
-                  <Text style={s.x}>×</Text>
-                  <TextInput style={s.miniInput} placeholder="Reps" keyboardType="numeric"
-                    value={ex.reps} onChangeText={v => atualizarEx(i, 'reps', v.replace(/[^0-9]/g, ''))} />
-                  <Text style={s.x}>·</Text>
-                  <TextInput style={[s.miniInput, { width: 52 }]} placeholder="60s"
-                    value={ex.descanso} onChangeText={v => atualizarEx(i, 'descanso', v)} />
-                </View>
-
-                {(obsAbertas[i] || ex.observacao) && (
-                  <TextInput
-                    style={s.obsInput}
-                    placeholder="Observacao..."
-                    placeholderTextColor={theme.placeholder}
-                    value={ex.observacao || ''}
-                    onChangeText={v => atualizarEx(i, 'observacao', v)}
-                    multiline
-                    autoFocus={obsAbertas[i] && !ex.observacao}
-                    onBlur={() => {
-                      if (!ex.observacao) setObsAbertas(prev => ({ ...prev, [i]: false }));
-                    }}
-                  />
-                )}
-
-                <View style={s.exCardRodape}>
-                  {!(obsAbertas[i] || ex.observacao) && (
-                    <TouchableOpacity
-                      style={s.obsToggle}
-                      onPress={() => setObsAbertas(prev => ({ ...prev, [i]: true }))}
-                    >
-                      <Ionicons name="chatbubble-outline" size={13} color={theme.textTertiary} />
-                      <Text style={s.obsToggleTexto}>Adicionar comentario</Text>
+              <ScaleDecorator activeScale={1.02}>
+                <View style={[s.exCard, isActive && { opacity: 0.92, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 }]}>
+                  <View style={s.exCardTopo}>
+                    <TouchableOpacity onLongPress={drag} delayLongPress={150} style={s.dragHandle}>
+                      <Ionicons name="reorder-three-outline" size={22} color={theme.textTertiary} />
                     </TouchableOpacity>
+                    <View style={[s.exNum, metodo && { backgroundColor: metodo.cor }]}>
+                      <Text style={s.exNumTexto}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.exNome}>{ex.nome}</Text>
+                      {metodo && (
+                        <View style={[s.metodoBadge, { backgroundColor: metodo.cor + '20', borderColor: metodo.cor + '60', marginTop: 4 }]}>
+                          <Text style={[s.metodoBadgeTexto, { color: metodo.cor }]}>{metodo.label}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={s.exEditBtn}
+                      onPress={() => navigation.navigate('NovoExercicio', { exercicio: ex })}
+                    >
+                      <Ionicons name="pencil-outline" size={15} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={[s.exInputs, { marginTop: 12 }]}>
+                    <TextInput style={s.miniInput} placeholder="Séries" keyboardType="numeric"
+                      value={String(ex.series)} onChangeText={v => atualizarEx(ex.id, 'series', v)} />
+                    <Text style={s.x}>×</Text>
+                    <TextInput style={s.miniInput} placeholder="Reps" keyboardType="numeric"
+                      value={ex.reps} onChangeText={v => atualizarEx(ex.id, 'reps', v.replace(/[^0-9]/g, ''))} />
+                    <Text style={s.x}>·</Text>
+                    <TextInput style={[s.miniInput, { width: 52 }]} placeholder="60s"
+                      value={ex.descanso} onChangeText={v => atualizarEx(ex.id, 'descanso', v)} />
+                  </View>
+
+                  {(obsAbertas[ex.id] || ex.observacao) && (
+                    <TextInput
+                      style={s.obsInput}
+                      placeholder="Observacao..."
+                      placeholderTextColor={theme.placeholder}
+                      value={ex.observacao || ''}
+                      onChangeText={v => atualizarEx(ex.id, 'observacao', v)}
+                      multiline
+                      autoFocus={obsAbertas[ex.id] && !ex.observacao}
+                      onBlur={() => {
+                        if (!ex.observacao) setObsAbertas(prev => ({ ...prev, [ex.id]: false }));
+                      }}
+                    />
                   )}
-                  <TouchableOpacity
-                    style={s.exDeleteBtn}
-                    onPress={() => removerEx(i)}
-                  >
-                    <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                    <Text style={s.exDeleteTexto}>Remover</Text>
-                  </TouchableOpacity>
+
+                  <View style={s.exCardRodape}>
+                    {!(obsAbertas[ex.id] || ex.observacao) && (
+                      <TouchableOpacity
+                        style={s.obsToggle}
+                        onPress={() => setObsAbertas(prev => ({ ...prev, [ex.id]: true }))}
+                      >
+                        <Ionicons name="chatbubble-outline" size={13} color={theme.textTertiary} />
+                        <Text style={s.obsToggleTexto}>Adicionar comentario</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={s.exDeleteBtn}
+                      onPress={() => removerEx(ex.id)}
+                    >
+                      <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                      <Text style={s.exDeleteTexto}>Remover</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
+              </ScaleDecorator>
             );
-          });
-        })()}
+          }}
+        />
 
         <View style={s.addBotoesRow}>
           <TouchableOpacity style={s.botaoAddEx} onPress={() => setModalExAberto(true)}>
@@ -443,6 +451,7 @@ function makeStyles(t) {
 
     exCard: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: t.border },
     exCardTopo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    dragHandle: { paddingHorizontal: 4, paddingVertical: 6 },
     exNum: { width: 26, height: 26, borderRadius: 13, backgroundColor: t.red, justifyContent: 'center', alignItems: 'center' },
     exNumTexto: { color: '#fff', fontWeight: '700', fontSize: 12 },
     exNome: { fontWeight: '700', color: t.textPrimary, fontSize: 14 },
