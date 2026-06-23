@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, FlatList, Modal
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -92,27 +93,35 @@ export default function MontarTreinoScreen({ route, navigation }) {
     setModalAberto(false);
   }
 
-  function atualizarExercicio(ti, ei, campo, valor) {
+  function atualizarExercicio(ti, exId, campo, valor) {
     setTreinos(prev => {
       const novo = [...prev];
-      novo[ti] = { ...novo[ti], exercicios: [...novo[ti].exercicios] };
-      novo[ti].exercicios[ei] = { ...novo[ti].exercicios[ei], [campo]: valor };
+      novo[ti] = {
+        ...novo[ti],
+        exercicios: novo[ti].exercicios.map(e => e.id === exId ? { ...e, [campo]: valor } : e),
+      };
       return novo;
     });
   }
 
-  function removerExercicio(ti, ei) {
+  function removerExercicio(ti, exId) {
     setTreinos(prev => {
       const novo = [...prev];
-      const exId = novo[ti].exercicios[ei]?.id;
       novo[ti] = {
         ...novo[ti],
-        exercicios: novo[ti].exercicios.filter((_, i) => i !== ei),
-        // remove from any method group that referenced this exercise
+        exercicios: novo[ti].exercicios.filter(e => e.id !== exId),
         metodosEspeciais: (novo[ti].metodosEspeciais || [])
           .map(g => ({ ...g, exercicioIds: g.exercicioIds.filter(id => id !== exId) }))
           .filter(g => g.exercicioIds.length > 0),
       };
+      return novo;
+    });
+  }
+
+  function reordenarExercicios(ti, data) {
+    setTreinos(prev => {
+      const novo = [...prev];
+      novo[ti] = { ...novo[ti], exercicios: data };
       return novo;
     });
   }
@@ -267,77 +276,90 @@ export default function MontarTreinoScreen({ route, navigation }) {
               </View>
 
               <Text style={[s.labelSmall, { marginTop: 12 }]}>EXERCÍCIOS</Text>
-              {treino.exercicios.map((ex, ei) => {
-                const metodo = exMetodoMap[ex.id];
-                return (
-                  <View key={ex.id} style={s.exRow}>
-                    <View style={s.exRowTopo}>
-                      <View style={[s.exNumero, metodo && { backgroundColor: metodo.cor }]}>
-                        <Text style={s.exNumeroTexto}>{ei + 1}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.exNome}>{ex.nome}</Text>
-                        {metodo && (
-                          <View style={[s.metodoBadge, { backgroundColor: metodo.cor + '20', borderColor: metodo.cor + '60', marginTop: 4 }]}>
-                            <Text style={[s.metodoBadgeTexto, { color: metodo.cor }]}>{metodo.label}</Text>
+              <DraggableFlatList
+                data={treino.exercicios}
+                keyExtractor={ex => ex.id}
+                scrollEnabled={false}
+                onDragEnd={({ data }) => reordenarExercicios(ti, data)}
+                renderItem={({ item: ex, drag, isActive, getIndex }) => {
+                  const ei = getIndex();
+                  const metodo = exMetodoMap[ex.id];
+                  const obsKey = `${ti}_${ex.id}`;
+                  return (
+                    <ScaleDecorator activeScale={1.02}>
+                      <View style={[s.exRow, isActive && { opacity: 0.92, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 }]}>
+                        <View style={s.exRowTopo}>
+                          <TouchableOpacity onLongPress={drag} delayLongPress={150} style={s.dragHandle}>
+                            <Ionicons name="reorder-three-outline" size={22} color={theme.textTertiary} />
+                          </TouchableOpacity>
+                          <View style={[s.exNumero, metodo && { backgroundColor: metodo.cor }]}>
+                            <Text style={s.exNumeroTexto}>{ei + 1}</Text>
                           </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.exNome}>{ex.nome}</Text>
+                            {metodo && (
+                              <View style={[s.metodoBadge, { backgroundColor: metodo.cor + '20', borderColor: metodo.cor + '60', marginTop: 4 }]}>
+                                <Text style={[s.metodoBadgeTexto, { color: metodo.cor }]}>{metodo.label}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            style={s.exEditBtn}
+                            onPress={() => navigation.navigate('NovoExercicio', { exercicio: ex })}
+                          >
+                            <Ionicons name="pencil-outline" size={15} color={theme.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={[s.exInputs, { marginTop: 12 }]}>
+                          <TextInput style={s.miniInput} placeholder="Séries" keyboardType="numeric"
+                            value={String(ex.series)} onChangeText={v => atualizarExercicio(ti, ex.id, 'series', v)} />
+                          <Text style={s.x}>×</Text>
+                          <TextInput style={s.miniInput} placeholder="Reps" keyboardType="numeric"
+                            value={ex.reps} onChangeText={v => atualizarExercicio(ti, ex.id, 'reps', v.replace(/[^0-9]/g, ''))} />
+                          <Text style={s.x}>·</Text>
+                          <TextInput style={[s.miniInput, { width: 52 }]} placeholder="60s"
+                            value={ex.descanso} onChangeText={v => atualizarExercicio(ti, ex.id, 'descanso', v)} />
+                        </View>
+
+                        {(obsAbertas[obsKey] || ex.observacao) && (
+                          <TextInput
+                            style={s.obsInput}
+                            placeholder="Observacao..."
+                            placeholderTextColor={theme.placeholder}
+                            value={ex.observacao || ''}
+                            onChangeText={v => atualizarExercicio(ti, ex.id, 'observacao', v)}
+                            multiline
+                            autoFocus={obsAbertas[obsKey] && !ex.observacao}
+                            onBlur={() => {
+                              if (!ex.observacao) setObsAbertas(prev => ({ ...prev, [obsKey]: false }));
+                            }}
+                          />
                         )}
+
+                        <View style={s.exCardRodape}>
+                          {!(obsAbertas[obsKey] || ex.observacao) && (
+                            <TouchableOpacity
+                              style={s.obsToggle}
+                              onPress={() => setObsAbertas(prev => ({ ...prev, [obsKey]: true }))}
+                            >
+                              <Ionicons name="chatbubble-outline" size={13} color={theme.textTertiary} />
+                              <Text style={s.obsToggleTexto}>Adicionar comentario</Text>
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            style={s.exDeleteBtn}
+                            onPress={() => removerExercicio(ti, ex.id)}
+                          >
+                            <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                            <Text style={s.exDeleteTexto}>Remover</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <TouchableOpacity
-                        style={s.exEditBtn}
-                        onPress={() => navigation.navigate('NovoExercicio', { exercicio: ex })}
-                      >
-                        <Ionicons name="pencil-outline" size={15} color={theme.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={[s.exInputs, { marginTop: 12 }]}>
-                      <TextInput style={s.miniInput} placeholder="Séries" keyboardType="numeric"
-                        value={String(ex.series)} onChangeText={v => atualizarExercicio(ti, ei, 'series', v)} />
-                      <Text style={s.x}>×</Text>
-                      <TextInput style={s.miniInput} placeholder="Reps" keyboardType="numeric"
-                        value={ex.reps} onChangeText={v => atualizarExercicio(ti, ei, 'reps', v.replace(/[^0-9]/g, ''))} />
-                      <Text style={s.x}>·</Text>
-                      <TextInput style={[s.miniInput, { width: 52 }]} placeholder="60s"
-                        value={ex.descanso} onChangeText={v => atualizarExercicio(ti, ei, 'descanso', v)} />
-                    </View>
-
-                    {(obsAbertas[`${ti}_${ei}`] || ex.observacao) && (
-                      <TextInput
-                        style={s.obsInput}
-                        placeholder="Observacao..."
-                        placeholderTextColor={theme.placeholder}
-                        value={ex.observacao || ''}
-                        onChangeText={v => atualizarExercicio(ti, ei, 'observacao', v)}
-                        multiline
-                        autoFocus={obsAbertas[`${ti}_${ei}`] && !ex.observacao}
-                        onBlur={() => {
-                          if (!ex.observacao) setObsAbertas(prev => ({ ...prev, [`${ti}_${ei}`]: false }));
-                        }}
-                      />
-                    )}
-
-                    <View style={s.exCardRodape}>
-                      {!(obsAbertas[`${ti}_${ei}`] || ex.observacao) && (
-                        <TouchableOpacity
-                          style={s.obsToggle}
-                          onPress={() => setObsAbertas(prev => ({ ...prev, [`${ti}_${ei}`]: true }))}
-                        >
-                          <Ionicons name="chatbubble-outline" size={13} color={theme.textTertiary} />
-                          <Text style={s.obsToggleTexto}>Adicionar comentario</Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={s.exDeleteBtn}
-                        onPress={() => removerExercicio(ti, ei)}
-                      >
-                        <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                        <Text style={s.exDeleteTexto}>Remover</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
+                    </ScaleDecorator>
+                  );
+                }}
+              />
 
               <View style={s.addBotoesRow}>
                 <TouchableOpacity style={s.botaoAdd} onPress={() => { setTreinoSelecionado(ti); setModalAberto(true); }}>
@@ -573,6 +595,7 @@ function makeStyles(t) {
     diaTextoAtivo: { color: '#fff' },
     exRow: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: t.border },
     exRowTopo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    dragHandle: { paddingHorizontal: 4, paddingVertical: 6 },
     exNumero: { width: 26, height: 26, borderRadius: 13, backgroundColor: t.red, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
     exNumeroTexto: { color: '#fff', fontWeight: '700', fontSize: 12 },
     exNome: { fontWeight: '700', color: t.textPrimary, fontSize: 14 },
