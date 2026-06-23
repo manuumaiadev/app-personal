@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, FlatList, Modal
@@ -36,6 +36,7 @@ export default function MontarTreinoScreen({ route, navigation }) {
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [erroBanco, setErroBanco] = useState(false);
+  const reabrirModal = useRef(false);
 
   // --- Método especial modal ---
   const [metodoModal, setMetodoModal] = useState(false);
@@ -48,7 +49,13 @@ export default function MontarTreinoScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       listarExercicios(usuario.uid)
-        .then(setExerciciosBanco)
+        .then(lista => {
+          setExerciciosBanco(lista);
+          if (reabrirModal.current) {
+            reabrirModal.current = false;
+            setModalAberto(true);
+          }
+        })
         .catch(() => setErroBanco(true));
     }, [usuario.uid])
   );
@@ -404,6 +411,19 @@ export default function MontarTreinoScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
           </View>
+          <TouchableOpacity
+            style={s.botaoCriarEx}
+            onPress={() => {
+              reabrirModal.current = true;
+              setModalAberto(false);
+              setBuscaEx('');
+              navigation.navigate('NovoExercicio');
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={16} color={theme.red} />
+            <Text style={s.botaoCriarExTexto}>Criar novo exercício</Text>
+          </TouchableOpacity>
+
           <FlatList
             data={exerciciosBanco.filter(e =>
               !buscaEx || e.nome?.toLowerCase().includes(buscaEx.toLowerCase()) ||
@@ -596,6 +616,8 @@ function makeStyles(t) {
     vazioSub: { textAlign: 'center', color: t.textTertiary, fontSize: 13, lineHeight: 18 },
     botaoIrBanco: { marginTop: 8, backgroundColor: t.red, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },
     botaoIrBancoTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    botaoCriarEx: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: t.red, borderRadius: 10, padding: 12, marginBottom: 12 },
+    botaoCriarExTexto: { color: t.red, fontWeight: '600', fontSize: 14 },
     // Modal sucesso
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
     modalSucesso: { backgroundColor: t.surface, borderRadius: 16, padding: 32, alignItems: 'center', width: '100%' },

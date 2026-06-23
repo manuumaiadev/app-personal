@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, FlatList, Modal,
@@ -31,9 +31,18 @@ export default function EditarTreinoScreen({ route, navigation }) {
   const [metodoDescanso, setMetodoDescanso] = useState('60');
   const [salvando, setSalvando] = useState(false);
   const [obsAbertas, setObsAbertas] = useState({});
+  const reabrirModal = useRef(false);
 
   useFocusEffect(
-    useCallback(() => { listarExercicios(usuario.uid).then(setBanco); }, [usuario.uid])
+    useCallback(() => {
+      listarExercicios(usuario.uid).then(lista => {
+        setBanco(lista);
+        if (reabrirModal.current) {
+          reabrirModal.current = false;
+          setModalExAberto(true);
+        }
+      });
+    }, [usuario.uid])
   );
 
   function toggleDia(dia) {
@@ -285,6 +294,19 @@ export default function EditarTreinoScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
           </View>
+          <TouchableOpacity
+            style={s.botaoCriarEx}
+            onPress={() => {
+              reabrirModal.current = true;
+              setModalExAberto(false);
+              setBuscaEx('');
+              navigation.navigate('NovoExercicio');
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={16} color={theme.red} />
+            <Text style={s.botaoCriarExTexto}>Criar novo exercício</Text>
+          </TouchableOpacity>
+
           <FlatList
             data={banco.filter(e =>
               !buscaEx || e.nome?.toLowerCase().includes(buscaEx.toLowerCase()) ||
@@ -469,5 +491,7 @@ function makeStyles(t) {
     botaoFechar: { backgroundColor: t.elevated, borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 10, marginBottom: 30 },
     botaoFecharTexto: { fontWeight: '600', color: t.textPrimary },
     vazio: { textAlign: 'center', color: t.textTertiary, marginTop: 40 },
+    botaoCriarEx: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: t.red, borderRadius: 10, padding: 12, marginBottom: 12 },
+    botaoCriarExTexto: { color: t.red, fontWeight: '600', fontSize: 14 },
   };
 }
