@@ -159,22 +159,20 @@ function makeScreenStyles(t) {
     semFichaTexto: { fontSize: 16, fontWeight: '600', color: t.textSecondary, textAlign: 'center' },
     semFichaSubtitulo: { fontSize: 13, color: t.textTertiary, textAlign: 'center' },
     fichaCard: { backgroundColor: t.surface, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: t.border },
-    fichaTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-    fichaNome: { fontSize: 17, fontWeight: '700', color: t.textPrimary, marginBottom: 3 },
-    fichaUltima: { fontSize: 12, color: t.textSecondary },
-    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, marginLeft: 10 },
+    fichaTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 10 },
+    fichaNome: { flex: 1, fontSize: 17, fontWeight: '700', color: t.textPrimary },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
     statusTexto: { fontSize: 11, fontWeight: '600' },
-    progressoWrap: { marginBottom: 14 },
-    progressoNums: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },
+    progressoWrap: { marginBottom: 12 },
+    progressoNums: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 },
     progressoPct: { fontSize: 13, color: t.textSecondary },
-    progressoPctBig: { fontSize: 20, fontWeight: '800', color: t.textPrimary },
+    progressoPctBig: { fontSize: 15, fontWeight: '800', color: t.textPrimary },
     diasRestantes: { fontSize: 13, color: t.textSecondary },
     barBg: { height: 6, backgroundColor: t.elevated, borderRadius: 3, overflow: 'hidden' },
     barFill: { height: 6, borderRadius: 3 },
-    periodChip: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14, backgroundColor: t.elevated },
-    periodLabel: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-    periodDesc: { fontSize: 11, color: t.textSecondary, lineHeight: 15 },
-    periodDetalhe: { fontSize: 12, fontWeight: '700', color: t.textSecondary, marginTop: 2 },
+    periodChip: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, backgroundColor: t.elevated },
+    periodLabel: { fontSize: 12, fontWeight: '700' },
+    periodDetalhe: { fontSize: 12, fontWeight: '700', color: t.textSecondary },
     ctaCard: { borderRadius: 16, overflow: 'hidden', backgroundColor: t.red },
     ctaInner: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
     ctaLeft: { flex: 1 },
@@ -366,44 +364,24 @@ export default function InicioScreen({ navigation }) {
           return (
             <View key={ficha.id} style={s.fichaCard}>
 
+              {/* Header */}
               <View style={s.fichaTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.fichaNome}>{ficha.nome}</Text>
-                  <Text style={s.fichaUltima}>{ultimaExecTexto}</Text>
-                </View>
+                <Text style={s.fichaNome} numberOfLines={1}>{ficha.nome}</Text>
                 <View style={[s.statusBadge, { backgroundColor: statusCor + '18', borderColor: statusCor + '35' }]}>
                   <Text style={[s.statusTexto, { color: statusCor }]}>{LABELS_STATUS[status]}</Text>
                 </View>
               </View>
 
-              <View style={s.progressoWrap}>
-                <View style={s.progressoNums}>
-                  <Text style={s.progressoPct}>
-                    <Text style={s.progressoPctBig}>{pct}</Text>% concluido
-                  </Text>
-                  <Text style={s.diasRestantes}>
-                    {status === 'vencida' ? 'Vencida' : `${diasRestantes} dias`}
-                  </Text>
-                </View>
-                <View style={s.barBg}>
-                  <View style={[s.barFill, { width: `${pct}%`, backgroundColor: statusCor }]} />
-                </View>
-              </View>
-
+              {/* Period — uma linha só */}
               {period && (
                 <View style={[s.periodChip, { borderColor: period.tipo.cor + '28' }]}>
-                  <Ionicons name={period.tipo.icon} size={13} color={period.tipo.cor} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.periodLabel, { color: period.tipo.cor }]}>
-                      Semana {semanaIdx + 1} — {period.tipo.label}
-                    </Text>
-                    {PERIOD_DESC[period.tipo.id] && (
-                      <Text style={s.periodDesc}>{PERIOD_DESC[period.tipo.id]}</Text>
-                    )}
-                  </View>
+                  <Ionicons name={period.tipo.icon} size={12} color={period.tipo.cor} />
+                  <Text style={[s.periodLabel, { color: period.tipo.cor, flex: 1 }]} numberOfLines={1}>
+                    Sem. {semanaIdx + 1} — {period.tipo.label}
+                  </Text>
                   {(period.series || period.reps) && (
                     <Text style={s.periodDetalhe}>
-                      {[period.series && `${period.series}x`, period.reps && `${period.reps}`].filter(Boolean).join(' ')}
+                      {[period.series && `${period.series}x`, period.reps].filter(Boolean).join(' ')}
                     </Text>
                   )}
                 </View>

@@ -11,6 +11,9 @@ import { listarTreinosFicha } from '../../services/treinos';
 import { listarHistoricoAluno } from '../../services/execucoes';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
 import { TIPOS_PERIOD } from '../../utils/periodizacao';
+import AnaliseModal from './AnaliseModal';
+
+const DIAS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
 
 const PERIOD_DESC = {
   adaptativa: 'Fase inicial para adaptacao ao treino.',
@@ -67,10 +70,7 @@ function corIntensidade(v) {
 }
 
 // ── Inline evolution section ─────────────────────────────────────────────────
-function SecaoEvolucao({ ficha, semanaAtual, pct, diasRestantes, statusCor, historico, theme: t }) {
-  const semanas = todasSemanas(ficha)
-    .filter(s => s.period !== null && s.idx !== semanaAtual);
-
+function SecaoEvolucao({ ficha, historico, theme: t }) {
   const letras = new Set(ficha.treinos.map(tr => tr.letra));
   const sessoes = [...historico]
     .filter(item => letras.has(item.letra))
@@ -125,75 +125,6 @@ function SecaoEvolucao({ ficha, semanaAtual, pct, diasRestantes, statusCor, hist
         </View>
       )}
 
-      {/* Periodization weeks list */}
-      {semanas.map(({ idx, semana, period }) => {
-        const atual = idx === semanaAtual;
-        const passada = idx < semanaAtual;
-        const periodCor = period?.tipo?.cor || t.textTertiary;
-
-        return (
-          <View
-            key={idx}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'flex-start',
-              gap: 12,
-              padding: 12,
-              borderRadius: 12,
-              marginBottom: 6,
-              backgroundColor: atual ? periodCor + '12' : t.elevated,
-              borderWidth: atual ? 1.5 : 1,
-              borderColor: atual ? periodCor : t.border,
-              opacity: !passada && !atual ? 0.65 : 1,
-            }}
-          >
-            <View style={{
-              width: 30, height: 30, borderRadius: 15, marginTop: 1,
-              backgroundColor: passada ? '#22c55e20' : atual ? periodCor + '22' : t.surface,
-              justifyContent: 'center', alignItems: 'center', flexShrink: 0,
-            }}>
-              {passada
-                ? <Ionicons name="checkmark" size={14} color="#22c55e" />
-                : period
-                  ? <Ionicons name={period.tipo.icon} size={13} color={atual ? periodCor : t.textTertiary} />
-                  : <Text style={{ fontSize: 10, color: t.textTertiary, fontWeight: '700' }}>{semana}</Text>
-              }
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: passada ? '#22c55e' : t.textTertiary }}>
-                  Semana {semana}
-                </Text>
-                {atual && (
-                  <View style={{ backgroundColor: periodCor + '22', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 }}>
-                    <Text style={{ fontSize: 9, fontWeight: '800', color: periodCor }}>ATUAL</Text>
-                  </View>
-                )}
-              </View>
-
-              <Text style={{
-                fontSize: 14, fontWeight: '700', marginBottom: 2,
-                color: passada ? t.textSecondary : atual ? periodCor : t.textPrimary,
-              }}>
-                {period.tipo.label}
-              </Text>
-              {PERIOD_DESC[period.tipo.id] && !passada && (
-                <Text style={{ fontSize: 11, color: t.textSecondary, lineHeight: 16, marginBottom: 3 }}>
-                  {PERIOD_DESC[period.tipo.id]}
-                </Text>
-              )}
-              <Text style={{ fontSize: 11, fontWeight: '600', color: passada ? t.textTertiary : t.textSecondary }}>
-                {[
-                  period.series && `${period.series} series`,
-                  period.reps && `${period.reps} reps`,
-                  period.carga && `${period.carga}% carga`,
-                ].filter(Boolean).join(' · ')}
-              </Text>
-            </View>
-          </View>
-        );
-      })}
     </View>
   );
 }
@@ -230,9 +161,7 @@ function makeStyles(t) {
 
     timelineWrap: { marginBottom: 14 },
     timelineLabel: { fontSize: 10, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8, marginBottom: 10 },
-    timelineRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    weekDot: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
-    weekDotLabel: { fontSize: 9, fontWeight: '700', marginTop: 3 },
+    timelineRow: { flexDirection: 'row', gap: 6 },
 
     evolToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, marginBottom: 4 },
     evolToggleTexto: { fontSize: 13, fontWeight: '700', color: t.red, flex: 1 },
@@ -288,6 +217,7 @@ export default function TreinosScreen({ navigation }) {
   const [histItemExpandido, setHistItemExpandido] = useState(null);
   const [histExpandido, setHistExpandido] = useState(false);
   const [treinoExpandido, setTreinoExpandido] = useState(null);
+  const [fichaAnalise, setFichaAnalise] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -324,6 +254,7 @@ if (carregando) {
   }
 
   return (
+    <>
     <ScrollView style={s.container} contentContainerStyle={s.scroll}>
       <Text style={s.titulo}>Treinos</Text>
 
@@ -355,12 +286,49 @@ if (carregando) {
                     Semana {semanaIdx + 1} de {ficha.semanas || '—'}
                   </Text>
                 </View>
-                <View style={[s.badge, { backgroundColor: statusCor + '20' }]}>
-                  <Text style={[s.badgeTexto, { color: statusCor }]}>{LABELS_STATUS[status]}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setFichaAnalise(ficha)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="bar-chart-outline" size={20} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  <View style={[s.badge, { backgroundColor: statusCor + '20' }]}>
+                    <Text style={[s.badgeTexto, { color: statusCor }]}>{LABELS_STATUS[status]}</Text>
+                  </View>
                 </View>
               </View>
 
-              {/* Week timeline dots — CRONOGRAMA above period banner */}
+              {/* Progress */}
+              <View style={{ backgroundColor: theme.elevated, borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: theme.border }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
+                  <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2 }}>
+                      <Text style={{ fontSize: 40, fontWeight: '900', color: theme.textPrimary, letterSpacing: -2, lineHeight: 44 }}>{pct}</Text>
+                      <Text style={{ fontSize: 20, fontWeight: '800', color: statusCor }}>%</Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>concluido</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2 }}>
+                      <Text style={{ fontSize: 28, fontWeight: '800', color: theme.textPrimary, letterSpacing: -1 }}>
+                        {status === 'vencida' ? '—' : diasRestantes}
+                      </Text>
+                      {status !== 'vencida' && (
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textSecondary }}>d</Text>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>
+                      {status === 'vencida' ? 'Vencida' : 'restantes'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ height: 10, backgroundColor: theme.surface, borderRadius: 5, overflow: 'hidden' }}>
+                  <View style={{ height: 10, width: `${pct}%`, backgroundColor: statusCor, borderRadius: 5 }} />
+                </View>
+              </View>
+
+              {/* Week timeline dots — CRONOGRAMA */}
               {temPeriodizacao && semanas.length > 0 && (
                 <View style={s.timelineWrap}>
                   <Text style={s.timelineLabel}>CRONOGRAMA</Text>
@@ -370,20 +338,28 @@ if (carregando) {
                       const isPassada = idx < semanaIdx;
                       const dotCor = p?.tipo?.cor || theme.border;
                       return (
-                        <View key={idx} style={{ alignItems: 'center', gap: 3 }}>
-                          <View style={[s.weekDot, {
-                            backgroundColor: isPassada ? dotCor + '30' : isAtual ? dotCor + '25' : dotCor + '14',
-                            borderWidth: isAtual ? 2 : 0,
-                            borderColor: dotCor,
-                          }]}>
+                        <View key={idx} style={{ flex: 1, alignItems: 'center' }}>
+                          <View style={{
+                            width: '100%',
+                            borderRadius: 12,
+                            paddingVertical: 10,
+                            paddingHorizontal: 4,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                            backgroundColor: isPassada ? dotCor + '18' : isAtual ? dotCor + '20' : dotCor + '10',
+                            borderWidth: isAtual ? 2 : 1,
+                            borderColor: isAtual ? dotCor : dotCor + '40',
+                            opacity: !isPassada && !isAtual ? 0.7 : 1,
+                          }}>
                             {isPassada
-                              ? <Ionicons name="checkmark" size={12} color={dotCor} />
-                              : <View style={{ width: isAtual ? 8 : 6, height: isAtual ? 8 : 6, borderRadius: 4, backgroundColor: dotCor + (isAtual ? 'ff' : '80') }} />
+                              ? <Ionicons name="checkmark-circle" size={16} color={dotCor} />
+                              : <Text style={{ fontSize: 9, fontWeight: '700', color: dotCor, letterSpacing: 0.5 }}>S{semana}</Text>
                             }
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: isAtual ? dotCor : isPassada ? dotCor : theme.textSecondary, textAlign: 'center', lineHeight: 13 }}>
+                              {p?.tipo?.label || '—'}
+                            </Text>
                           </View>
-                          <Text style={[s.weekDotLabel, { color: isAtual ? dotCor : theme.textTertiary }]}>
-                            {semana}
-                          </Text>
                         </View>
                       );
                     })}
@@ -415,44 +391,11 @@ if (carregando) {
                 </View>
               )}
 
-              {/* Progress */}
-              <View style={{ backgroundColor: theme.elevated, borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: theme.border }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
-                  <View>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2 }}>
-                      <Text style={{ fontSize: 40, fontWeight: '900', color: theme.textPrimary, letterSpacing: -2, lineHeight: 44 }}>{pct}</Text>
-                      <Text style={{ fontSize: 20, fontWeight: '800', color: statusCor }}>%</Text>
-                    </View>
-                    <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>concluido</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 2 }}>
-                      <Text style={{ fontSize: 28, fontWeight: '800', color: theme.textPrimary, letterSpacing: -1 }}>
-                        {status === 'vencida' ? '—' : diasRestantes}
-                      </Text>
-                      {status !== 'vencida' && (
-                        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textSecondary }}>d</Text>
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>
-                      {status === 'vencida' ? 'Vencida' : 'restantes'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ height: 10, backgroundColor: theme.surface, borderRadius: 5, overflow: 'hidden' }}>
-                  <View style={{ height: 10, width: `${pct}%`, backgroundColor: statusCor, borderRadius: 5 }} />
-                </View>
-              </View>
-
               {/* Evolution section — always visible */}
               {temPeriodizacao && (
                 <>
                   <SecaoEvolucao
                     ficha={ficha}
-                    semanaAtual={semanaIdx}
-                    pct={pct}
-                    diasRestantes={diasRestantes}
-                    statusCor={statusCor}
                     historico={historico}
                     theme={theme}
                   />
@@ -468,39 +411,62 @@ if (carregando) {
                   <Text style={s.treinosLabel}>TREINOS</Text>
                   {ficha.treinos.map(treino => {
                     const expanded = treinoExpandido === treino.id;
+                    const diaHoje = DIAS_PT[new Date().getDay()];
+                    const ehHoje = treino.diasDaSemana?.includes(diaHoje);
                     return (
-                      <View key={treino.id} style={s.treinoCard}>
+                      <View key={treino.id} style={[s.treinoCard, ehHoje && { backgroundColor: theme.red, borderColor: theme.red }]}>
                         <TouchableOpacity
-                          style={s.treinoHeader}
+                          style={[s.treinoHeader, ehHoje && { paddingVertical: 16 }]}
                           onPress={() => setTreinoExpandido(expanded ? null : treino.id)}
-                          activeOpacity={0.8}
+                          activeOpacity={0.85}
                         >
-                          <View style={s.treinoLetra}>
-                            <Text style={s.treinoLetraTexto}>{treino.letra}</Text>
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.treinoNome}>Treino {treino.letra}</Text>
-                            {treino.diasDaSemana?.length > 0 && (
-                              <Text style={s.treinoDias}>{treino.diasDaSemana.join(' · ')}</Text>
-                            )}
-                            <Text style={s.treinoExsCount}>
-                              {treino.exercicios?.length || 0} exercicios
-                            </Text>
-                          </View>
-                          <View style={s.treinoActions}>
-                            <Ionicons
-                              name={expanded ? 'chevron-up' : 'chevron-down'}
-                              size={16}
-                              color={theme.textTertiary}
-                            />
-                            <TouchableOpacity
-                              style={s.playBtn}
-                              onPress={() => navigation.navigate('VisualizarTreino', { treino, ficha })}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Ionicons name="play" size={14} color="#fff" />
-                            </TouchableOpacity>
-                          </View>
+                          {ehHoje ? (
+                            <>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.65)', letterSpacing: 0.8, marginBottom: 4 }}>TREINO DE HOJE</Text>
+                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 3 }}>Treino {treino.letra}</Text>
+                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                                  {[treino.diasDaSemana?.join(' · '), `${treino.exercicios?.length || 0} exercicios`].filter(Boolean).join('  ·  ')}
+                                </Text>
+                              </View>
+                              <TouchableOpacity
+                                style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
+                                onPress={() => navigation.navigate('VisualizarTreino', { treino, ficha })}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Ionicons name="play" size={16} color="#fff" />
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              <View style={s.treinoLetra}>
+                                <Text style={s.treinoLetraTexto}>{treino.letra}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.treinoNome}>Treino {treino.letra}</Text>
+                                {treino.diasDaSemana?.length > 0 && (
+                                  <Text style={s.treinoDias}>{treino.diasDaSemana.join(' · ')}</Text>
+                                )}
+                                <Text style={s.treinoExsCount}>
+                                  {treino.exercicios?.length || 0} exercicios
+                                </Text>
+                              </View>
+                              <View style={s.treinoActions}>
+                                <Ionicons
+                                  name={expanded ? 'chevron-up' : 'chevron-down'}
+                                  size={16}
+                                  color={theme.textTertiary}
+                                />
+                                <TouchableOpacity
+                                  style={s.playBtn}
+                                  onPress={() => navigation.navigate('VisualizarTreino', { treino, ficha })}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Ionicons name="play" size={14} color="#fff" />
+                                </TouchableOpacity>
+                              </View>
+                            </>
+                          )}
                         </TouchableOpacity>
 
                         {expanded && (
@@ -602,5 +568,14 @@ if (carregando) {
         </>
       )}
     </ScrollView>
+
+    <AnaliseModal
+      visible={fichaAnalise !== null}
+      ficha={fichaAnalise}
+      historico={historico}
+      onClose={() => setFichaAnalise(null)}
+      theme={theme}
+    />
+    </>
   );
 }
