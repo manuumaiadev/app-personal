@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { criarExercicio, atualizarExercicio } from '../../services/exercicios';
+import { criarExercicio, atualizarExercicio, buscarExercicio } from '../../services/exercicios';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -25,6 +25,18 @@ export default function NovoExercicioScreen({ route, navigation }) {
   const [erro, setErro] = useState('');
   const [modalGrupo, setModalGrupo] = useState(false);
   const [modalEquip, setModalEquip] = useState(false);
+
+  useEffect(() => {
+    if (!modoEdicao) return;
+    if (exercicioExistente.descricao === undefined || exercicioExistente.videoUrl === undefined) {
+      buscarExercicio(exercicioExistente.id).then(ex => {
+        if (!ex) return;
+        setDescricao(ex.descricao || '');
+        setVideoUrl(ex.videoUrl || '');
+        setEquipamento(ex.equipamento || '');
+      });
+    }
+  }, []);
 
   async function handleSalvar() {
     setErro('');

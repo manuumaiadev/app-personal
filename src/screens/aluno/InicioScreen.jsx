@@ -66,13 +66,18 @@ function calcularStats(historico) {
     streak = contarStreak(ontem);
   }
 
+  const domingoSemana = new Date(hoje);
+  domingoSemana.setDate(hoje.getDate() - hoje.getDay());
+
   const semana = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(hoje);
-    d.setDate(d.getDate() - (6 - i));
+    const d = new Date(domingoSemana);
+    d.setDate(domingoSemana.getDate() + i);
+    const iso = d.toISOString().split('T')[0];
     return {
       label: DIAS_SEMANA[d.getDay()],
-      treinou: diasUnicos.has(d.toISOString().split('T')[0]),
-      isHoje: i === 6,
+      treinou: d <= hoje && diasUnicos.has(iso),
+      isHoje: iso === hoje.toISOString().split('T')[0],
+      isFuturo: d > hoje,
     };
   });
 
@@ -83,19 +88,24 @@ function calcularStats(historico) {
     return d && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
   }).length;
 
+  const ESFORCO_VALOR = { facil: 33, moderado: 66, dificil: 100 };
   let intensidade = 0;
   let mediaCarga = 0;
   if (historico.length > 0) {
     const exs = historico[0].exercicios || [];
-    let totalSeries = 0, seriesComCarga = 0, somaCargas = 0, countCargas = 0;
+    const todasEsforcas = exs.flatMap(ex => (ex.esforco || []).filter(Boolean));
+    if (todasEsforcas.length > 0) {
+      intensidade = Math.round(
+        todasEsforcas.reduce((a, e) => a + (ESFORCO_VALOR[e] || 0), 0) / todasEsforcas.length
+      );
+    }
+    let somaCargas = 0, countCargas = 0;
     exs.forEach(ex => {
       (ex.cargas || []).forEach(c => {
-        totalSeries++;
         const v = parseFloat(c);
-        if (!isNaN(v) && v > 0) { seriesComCarga++; somaCargas += v; countCargas++; }
+        if (!isNaN(v) && v > 0) { somaCargas += v; countCargas++; }
       });
     });
-    intensidade = totalSeries > 0 ? Math.round((seriesComCarga / totalSeries) * 100) : 0;
     mediaCarga = countCargas > 0 ? Math.round(somaCargas / countCargas) : 0;
   }
 
@@ -184,32 +194,19 @@ function Dashboard({ historico }) {
 
   const intensidadeCor =
     intensidade === 0 ? C.textTertiary :
-    intensidade < 40 ? '#60a5fa' :
-    intensidade < 75 ? '#f59e0b' : C.red;
+    intensidade <= 40 ? '#22c55e' :
+    intensidade <= 70 ? '#f59e0b' : C.red;
 
   const intensidadeLabel =
     intensidade === 0 ? '—' :
-    intensidade < 40 ? 'Leve' :
-    intensidade < 75 ? 'Moderada' : 'Intensa';
+    intensidade <= 40 ? 'Leve' :
+    intensidade <= 70 ? 'Moderada' : 'Intensa';
 
   return (
     <View style={dash.card}>
       <View style={dash.body}>
-        <View style={dash.streakCol}>
-          <Text style={dash.streakNum}>{streak}</Text>
-          <Text style={dash.streakLabel}>dias{'\n'}seguidos</Text>
-          <Ionicons
-            name={streak === 0 ? 'flame-outline' : 'flame'}
-            size={20}
-            color={streak === 0 ? C.textTertiary : C.red}
-            style={{ marginTop: 6 }}
-          />
-        </View>
-
-        <View style={dash.dividerV} />
-
         <View style={dash.weekCol}>
-          <Text style={dash.weekTitle}>ULTIMOS 7 DIAS</Text>
+          <Text style={dash.weekTitle}>ESTA SEMANA</Text>
           <View style={dash.ringRow}>
             {semana.map((dia, i) => (
               <View key={i} style={dash.ringCol}>
@@ -235,6 +232,19 @@ function Dashboard({ historico }) {
             <Text style={{ color: C.textPrimary, fontWeight: '700' }}>{treinosSemana}</Text>
             <Text style={{ color: C.textSecondary }}>/7 dias  ·  {treinosMes} no mes</Text>
           </Text>
+        </View>
+
+        <View style={dash.dividerV} />
+
+        <View style={dash.streakCol}>
+          <Text style={dash.streakNum}>{streak}</Text>
+          <Text style={dash.streakLabel}>dias{'\n'}seguidos</Text>
+          <Ionicons
+            name={streak === 0 ? 'flame-outline' : 'flame'}
+            size={20}
+            color={streak === 0 ? C.textTertiary : C.red}
+            style={{ marginTop: 6 }}
+          />
         </View>
       </View>
 
@@ -329,8 +339,6 @@ export default function InicioScreen({ navigation }) {
         </View>
         <Image source={require('../../../assets/minilogo.png')} style={s.iconBadge} resizeMode="contain" />
       </View>
-
-      <Dashboard historico={historico} />
 
       {fichasComTreinos.length === 0 ? (
         <View style={s.semFicha}>
@@ -430,6 +438,8 @@ export default function InicioScreen({ navigation }) {
           );
         })
       )}
+
+      <Dashboard historico={historico} />
 
     </ScrollView>
   );
