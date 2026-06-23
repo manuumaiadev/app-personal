@@ -29,27 +29,25 @@ function semanaAtualDaFicha(ficha) {
   return Math.max(0, Math.min(idx, (ficha.semanas || 1) - 1));
 }
 
-function resolverPeriod(treinos, semanaIdx) {
-  for (const t of treinos) {
-    const item = (t.periodizacao || [])[semanaIdx];
-    if (!item) continue;
-    const tipoId = typeof item === 'string' ? item : item.tipo;
-    const tipo = TIPOS_PERIOD.find(p => p.id === tipoId);
-    if (tipo) return {
-      tipo,
-      series: (typeof item === 'object' && item.series) || tipo.series,
-      reps: (typeof item === 'object' && item.reps) || tipo.reps,
-      carga: (typeof item === 'object' && item.carga) || tipo.carga,
-    };
-  }
-  return null;
+function resolverPeriod(ficha, semanaIdx) {
+  const item = (ficha.periodizacao || [])[semanaIdx];
+  if (!item) return null;
+  const tipoId = typeof item === 'string' ? item : item.tipo;
+  const tipo = TIPOS_PERIOD.find(p => p.id === tipoId);
+  if (!tipo) return null;
+  return {
+    tipo,
+    series: (typeof item === 'object' && item.series) || tipo.series,
+    reps: (typeof item === 'object' && item.reps) || tipo.reps,
+    carga: (typeof item === 'object' && item.carga) || tipo.carga,
+  };
 }
 
-function todasSemanas(treinos, total) {
-  return Array.from({ length: total || 0 }, (_, i) => ({
+function todasSemanas(ficha) {
+  return Array.from({ length: ficha.semanas || 0 }, (_, i) => ({
     idx: i,
     semana: i + 1,
-    period: resolverPeriod(treinos, i),
+    period: resolverPeriod(ficha, i),
   }));
 }
 
@@ -70,7 +68,7 @@ function corIntensidade(v) {
 
 // ── Inline evolution section ─────────────────────────────────────────────────
 function SecaoEvolucao({ ficha, semanaAtual, pct, diasRestantes, statusCor, historico, theme: t }) {
-  const semanas = todasSemanas(ficha.treinos, ficha.semanas)
+  const semanas = todasSemanas(ficha)
     .filter(s => s.period !== null && s.idx !== semanaAtual);
 
   const letras = new Set(ficha.treinos.map(tr => tr.letra));
@@ -342,9 +340,9 @@ if (carregando) {
             ? calcularProgresso(ficha.criadoEm, ficha.dataVencimento)
             : { pct: 0, diasRestantes: 0 };
           const semanaIdx = semanaAtualDaFicha(ficha);
-          const period = resolverPeriod(ficha.treinos, semanaIdx);
+          const period = resolverPeriod(ficha, semanaIdx);
           const statusCor = CORES_STATUS[status];
-          const semanas = todasSemanas(ficha.treinos, ficha.semanas);
+          const semanas = todasSemanas(ficha);
           const temPeriodizacao = semanas.some(s => s.period !== null);
           return (
             <View key={ficha.id} style={s.fichaCard}>
