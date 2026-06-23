@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { listarFichasAluno } from '../../services/fichas';
+import { listarTreinosFicha } from '../../services/treinos';
 import { listarHistoricoAluno } from '../../services/execucoes';
 import { buscarNotas, salvarNotas } from '../../services/notas';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
+import { AnaliseConteudo } from '../aluno/AnaliseModal';
 
 const TABS = ['Fichas', 'Anamnese', 'Historico'];
 
@@ -50,7 +52,10 @@ export default function PerfilAlunoScreen({ route, navigation }) {
             const db = b.criadoEm?.toDate?.() || new Date(0);
             return db - da;
           });
-          setFichas(sorted);
+          const comTreinos = await Promise.all(
+            sorted.map(async f => ({ ...f, treinos: await listarTreinosFicha(f.id) }))
+          );
+          setFichas(comTreinos);
           const ativa = sorted.find(
             f => f.dataVencimento && calcularStatusFicha(f.dataVencimento) !== 'vencida'
           );
@@ -86,6 +91,8 @@ export default function PerfilAlunoScreen({ route, navigation }) {
   }
 
   const iniciais = aluno.nome?.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
+
+  const fichaParaAnalise = fichas.find(f => f.id === fichaAtivaId) || fichas[0] || null;
 
   return (
     <View style={s.container}>
@@ -224,11 +231,27 @@ export default function PerfilAlunoScreen({ route, navigation }) {
 
           {/* HISTORICO */}
           {aba === 'Historico' && (
-            historico.length === 0 ? (
-              <Text style={s.vazio}>Nenhum treino registrado ainda.</Text>
-            ) : (
-              <>
-                {(histExpandido ? historico : historico.slice(0, 1)).map(item => (
+            <>
+              {fichaParaAnalise && (
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8, marginBottom: 12 }}>
+                    ANALISE — {fichaParaAnalise.nome.toUpperCase()}
+                  </Text>
+                  <AnaliseConteudo ficha={fichaParaAnalise} historico={historico} theme={theme} />
+                </View>
+              )}
+
+              {historico.length > 0 && (
+                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8, marginBottom: 12, marginTop: 4 }}>
+                  SESSOES REGISTRADAS
+                </Text>
+              )}
+
+              {historico.length === 0 ? (
+                <Text style={s.vazio}>Nenhum treino registrado ainda.</Text>
+              ) : (
+                <>
+                  {(histExpandido ? historico : historico.slice(0, 1)).map(item => (
                   <TouchableOpacity
                     key={item.id}
                     style={s.histCard}
@@ -264,7 +287,8 @@ export default function PerfilAlunoScreen({ route, navigation }) {
                   </TouchableOpacity>
                 )}
               </>
-            )
+            )}
+            </>
           )}
         </ScrollView>
       )}
