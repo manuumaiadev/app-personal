@@ -1,25 +1,23 @@
 import { useMemo } from 'react';
-import { Modal, SafeAreaView, ScrollView, View, Text, TouchableOpacity } from 'react-native';
+import { Modal, SafeAreaView, ScrollView, View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-const ESFORCO_VALOR = { facil: 33, moderado: 66, dificil: 100 };
+const ESFORCO_LEGADO = { facil: 33, moderado: 66, dificil: 100 };
+
+function valorEsforco(e) {
+  if (typeof e === 'number') return e;
+  return ESFORCO_LEGADO[e] ?? null;
+}
 
 function calcIntens(item) {
-  const todas = (item.exercicios || []).flatMap(ex => (ex.esforco || []).filter(Boolean));
+  const todas = (item.exercicios || [])
+    .flatMap(ex => (ex.esforco || []).map(valorEsforco).filter(v => v !== null));
   if (!todas.length) return null;
-  return Math.round(todas.reduce((a, e) => a + (ESFORCO_VALOR[e] || 0), 0) / todas.length);
+  return Math.round(todas.reduce((a, b) => a + b, 0) / todas.length);
 }
 
-function isoWeekKey(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const w1 = new Date(d.getFullYear(), 0, 4);
-  const wn = 1 + Math.round(((d - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
-  return `${d.getFullYear()}-${wn}`;
-}
 
-export function useMetricas(ficha, historico) {
+export function useMetricas(ficha, historico, cardioLogs) {
   return useMemo(() => {
     const sessoes = (historico || []).filter(s => s.fichaId === ficha?.id);
 
@@ -28,59 +26,40 @@ export function useMetricas(ficha, historico) {
       ? Math.max(1, Math.floor((Date.now() - inicio.getTime()) / (7 * 24 * 60 * 60 * 1000)))
       : 1;
 
-    const diasPorSemana = (ficha?.treinos || []).reduce(
-      (acc, tr) => acc + (tr.diasDaSemana?.length || 0), 0
-    );
-    const sessoesEsperadas = Math.max(1, semanasCorridas * Math.max(1, diasPorSemana));
-
-    const frequencia = Math.min(100, Math.round((sessoes.length / sessoesEsperadas) * 100));
+    const diasPorSemana = ficha?.diasPorSemana
+      || Math.max(1, (ficha?.treinos || []).length)
+      || 3;
+    const sessoesEsperadas = Math.max(1, semanasCorridas * diasPorSemana);
+    // Permite bonus acima de 100% para dias extras (cap em 120%)
+    const frequencia = Math.min(120, Math.round((sessoes.length / sessoesEsperadas) * 100));
 
     const intensidades = sessoes.map(calcIntens).filter(v => v !== null);
+
+    const sessoesIntensidade = [...sessoes]
+      .reverse()
+      .map(s => ({ letra: s.letra || '?', intens: calcIntens(s), data: s.dataHora?.toDate?.() }))
+      .filter(s => s.intens !== null);
     const avg = arr => arr.length
       ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
       : 0;
     const intensidadeMedia = avg(intensidades);
 
-    const rendimento = 0; // calculado abaixo após streak
-
-    const semanasComSessao = new Set(
-      sessoes.map(s => {
-        const d = s.dataHora?.toDate?.();
-        return d ? isoWeekKey(d) : null;
-      }).filter(Boolean)
-    );
-    const consistencia = Math.round((semanasComSessao.size / semanasCorridas) * 100);
-
-    const diasComSessao = [
-      ...new Set(
-        sessoes.map(s => {
-          const d = s.dataHora?.toDate?.();
-          return d ? d.toISOString().split('T')[0] : null;
-        }).filter(Boolean)
-      ),
-    ].sort();
-
-    let streakMax = diasComSessao.length > 0 ? 1 : 0;
-    let streakAtual = 1;
-    for (let i = 1; i < diasComSessao.length; i++) {
-      const diff = Math.round(
-        (new Date(diasComSessao[i]) - new Date(diasComSessao[i - 1])) / 86400000
-      );
-      if (diff === 1) {
-        streakAtual++;
-        if (streakAtual > streakMax) streakMax = streakAtual;
-      } else {
-        streakAtual = 1;
-      }
+    // Cardio
+    const metaCardioMin = ficha?.metaCardio?.minutosPorSemana || 0;
+    let aderenciaCardio = null;
+    if (metaCardioMin > 0 && cardioLogs) {
+      const inicioSemana = new Date();
+      inicioSemana.setHours(0, 0, 0, 0);
+      inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay());
+      const minutosEssaSemana = (cardioLogs || [])
+        .filter(l => l.fichaId === ficha?.id && l.dataHora?.toDate?.() >= inicioSemana)
+        .reduce((a, l) => a + (l.minutos || 0), 0);
+      aderenciaCardio = Math.min(100, Math.round((minutosEssaSemana / metaCardioMin) * 100));
     }
 
-    const streakScore = Math.min(100, Math.round((streakMax / 14) * 100));
-    const rendimentoFinal = Math.round(
-      frequencia * 0.35 +
-      consistencia * 0.30 +
-      intensidadeMedia * 0.25 +
-      streakScore * 0.10
-    );
+    const rendimentoFinal = aderenciaCardio !== null
+      ? Math.round(frequencia * 0.55 + intensidadeMedia * 0.25 + aderenciaCardio * 0.20)
+      : Math.round(frequencia * 0.70 + intensidadeMedia * 0.30);
 
     let leve = 0, moderada = 0, intensa = 0;
     intensidades.forEach(v => {
@@ -94,15 +73,6 @@ export function useMetricas(ficha, historico) {
       moderada: Math.round((moderada / totalInt) * 100),
       intensa: Math.round((intensa / totalInt) * 100),
     };
-
-    const meio = Math.floor(intensidades.length / 2);
-    const avgPrimeira = meio > 0 ? avg(intensidades.slice(0, meio)) : null;
-    const avgSegunda = meio > 0 ? avg(intensidades.slice(meio)) : null;
-    let tendencia = null;
-    if (avgPrimeira !== null && avgSegunda !== null && intensidades.length >= 4) {
-      const diff = avgSegunda - avgPrimeira;
-      tendencia = diff > 5 ? 'subindo' : diff < -5 ? 'caindo' : 'estavel';
-    }
 
     const duracoes = sessoes.map(s => s.duracaoSegundos).filter(v => v > 0);
     const duracaoMedia = duracoes.length
@@ -118,16 +88,13 @@ export function useMetricas(ficha, historico) {
       frequencia,
       intensidadeMedia,
       rendimento: rendimentoFinal,
-      consistencia,
-      streakMax,
-      distPct,
-      tendencia,
-      avgPrimeira,
-      avgSegunda,
+      aderenciaCardio,
+      metaCardioMin,
+      sessoesIntensidade,
       duracaoMedia,
       treinoFreq,
     };
-  }, [ficha, historico]);
+  }, [ficha, historico, cardioLogs]);
 }
 
 function formatDuracao(seg) {
@@ -157,37 +124,73 @@ function MetricaBox({ label, valor, sub, cor, t }) {
   );
 }
 
-function BarraDistribuicao({ label, pct, cor, t }) {
+const SCREEN_W = Dimensions.get('window').width;
+
+function corIntens(v) {
+  if (v <= 33) return '#22c55e';
+  if (v <= 66) return '#f59e0b';
+  return '#ef4444';
+}
+
+function GraficoIntensidade({ sessoes, t }) {
+  if (!sessoes.length) {
+    return (
+      <Text style={{ fontSize: 13, color: t.textTertiary }}>
+        Nenhuma sessao com esforco registrado.
+      </Text>
+    );
+  }
+
+  const BAR_H = 56;
+  const barW = Math.max(24, Math.min(44, Math.floor((SCREEN_W - 80) / sessoes.length) - 6));
+
   return (
-    <View style={{ marginBottom: 10 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
-        <Text style={{ fontSize: 13, fontWeight: '600', color: t.textPrimary }}>{label}</Text>
-        <Text style={{ fontSize: 13, fontWeight: '700', color: cor }}>{pct}%</Text>
-      </View>
-      <View style={{ height: 8, backgroundColor: t.surface, borderRadius: 4, overflow: 'hidden' }}>
-        <View style={{ height: 8, width: `${pct}%`, backgroundColor: cor, borderRadius: 4 }} />
+    <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: BAR_H + 46, paddingHorizontal: 4 }}>
+          {sessoes.map((s, i) => {
+            const cor = corIntens(s.intens);
+            const h = Math.max(4, Math.round((s.intens / 100) * BAR_H));
+            const dia = s.data ? s.data.getDate() : '';
+            const mes = s.data
+              ? s.data.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+              : '';
+            return (
+              <View key={i} style={{ width: barW, alignItems: 'center' }}>
+                <Text style={{ fontSize: 8, fontWeight: '800', color: cor, marginBottom: 3 }}>{s.intens}</Text>
+                <View style={{ width: barW, height: BAR_H, justifyContent: 'flex-end' }}>
+                  <View style={{ height: h, backgroundColor: cor, borderRadius: 4 }} />
+                </View>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: t.textSecondary, marginTop: 5 }}>
+                  {s.letra}
+                </Text>
+                <Text style={{ fontSize: 8, color: t.textTertiary, marginTop: 1 }}>
+                  {dia}/{mes}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+      <View style={{ flexDirection: 'row', gap: 14, marginTop: 10 }}>
+        {[['#22c55e', 'Leve (≤33)'], ['#f59e0b', 'Moderada (≤66)'], ['#ef4444', 'Intensa (>66)']].map(([cor, label]) => (
+          <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: cor }} />
+            <Text style={{ fontSize: 10, color: t.textSecondary }}>{label}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
 }
 
 // Conteúdo puro das métricas — pode ser embutido em qualquer tela
-export function AnaliseConteudo({ ficha, historico, theme: t }) {
-  const m = useMetricas(ficha, historico);
+export function AnaliseConteudo({ ficha, historico, cardioLogs, theme: t }) {
+  const m = useMetricas(ficha, historico, cardioLogs);
 
   const rend = m.rendimento;
   const corHero = corRendimento(rend);
 
-  const tendIcon = m.tendencia === 'subindo'
-    ? 'trending-up'
-    : m.tendencia === 'caindo'
-    ? 'trending-down'
-    : 'remove';
-  const tendCor = m.tendencia === 'subindo'
-    ? '#22c55e'
-    : m.tendencia === 'caindo'
-    ? '#ef4444'
-    : '#f59e0b';
 
   if (m.totalSessoes === 0) {
     return (
@@ -226,7 +229,6 @@ export function AnaliseConteudo({ ficha, historico, theme: t }) {
                 const fraco = [
                   { label: 'frequencia', v: m.frequencia },
                   { label: 'intensidade', v: m.intensidadeMedia },
-                  { label: 'consistencia', v: m.consistencia },
                 ].sort((a, b) => a.v - b.v)[0].label;
                 return `Melhore sua ${fraco}`;
               })()
@@ -236,60 +238,27 @@ export function AnaliseConteudo({ ficha, historico, theme: t }) {
           <View style={{ height: 10, width: `${rend}%`, backgroundColor: corHero, borderRadius: 5 }} />
         </View>
         <Text style={{ fontSize: 10, color: t.textTertiary, marginTop: 6, textAlign: 'center' }}>
-          Frequencia 35% · Consistencia 30% · Intensidade 25% · Sequencia 10%
+          {m.aderenciaCardio !== null
+            ? 'Frequencia 55% · Intensidade 25% · Cardio 20%'
+            : 'Frequencia 70% · Intensidade 30%'}
         </Text>
       </View>
 
-      {/* 2x2 grid */}
+      {/* grid */}
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <MetricaBox label="Frequencia" valor={m.frequencia} sub="%" cor={corRendimento(m.frequencia)} t={t} />
         <MetricaBox label="Intensidade" valor={m.intensidadeMedia} sub="%" cor={corRendimento(m.intensidadeMedia)} t={t} />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <MetricaBox label="Consistencia" valor={m.consistencia} sub="%" cor={corRendimento(m.consistencia)} t={t} />
-        <MetricaBox label="Sequencia max" valor={m.streakMax} sub={m.streakMax === 1 ? 'dia' : 'dias'} t={t} />
-      </View>
-
-      {/* Distribuicao */}
-      <View style={{ backgroundColor: t.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: t.border }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8, marginBottom: 14 }}>
-          DISTRIBUICAO DE INTENSIDADE
-        </Text>
-        <BarraDistribuicao label="Leve" pct={m.distPct.leve} cor="#22c55e" t={t} />
-        <BarraDistribuicao label="Moderada" pct={m.distPct.moderada} cor="#f59e0b" t={t} />
-        <BarraDistribuicao label="Intensa" pct={m.distPct.intensa} cor="#ef4444" t={t} />
-      </View>
-
-      {/* Evolucao */}
-      <View style={{ backgroundColor: t.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: t.border }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8, marginBottom: 14 }}>
-          EVOLUCAO DE INTENSIDADE
-        </Text>
-        {m.tendencia ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <Text style={{ fontSize: 13, color: t.textSecondary }}>Primeiras sessoes</Text>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: t.textPrimary }}>{m.avgPrimeira}%</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={{ fontSize: 13, color: t.textSecondary }}>Ultimas sessoes</Text>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: t.textPrimary }}>{m.avgSegunda}%</Text>
-              </View>
-            </View>
-            <View style={{
-              width: 52, height: 52, borderRadius: 26,
-              backgroundColor: tendCor + '18',
-              justifyContent: 'center', alignItems: 'center',
-            }}>
-              <Ionicons name={tendIcon} size={26} color={tendCor} />
-            </View>
-          </View>
-        ) : (
-          <Text style={{ fontSize: 13, color: t.textTertiary }}>
-            Dados insuficientes (minimo 4 sessoes com esforco registrado)
-          </Text>
+        {m.aderenciaCardio !== null && (
+          <MetricaBox label="Cardio" valor={m.aderenciaCardio} sub="%" cor={corRendimento(m.aderenciaCardio)} t={t} />
         )}
+      </View>
+
+      {/* Grafico de intensidade por sessao */}
+      <View style={{ backgroundColor: t.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: t.border }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8, marginBottom: 14 }}>
+          INTENSIDADE POR SESSAO
+        </Text>
+        <GraficoIntensidade sessoes={m.sessoesIntensidade} t={t} />
       </View>
 
       {/* Volume */}
@@ -322,7 +291,7 @@ export function AnaliseConteudo({ ficha, historico, theme: t }) {
 }
 
 // Modal wrapper — usado na tela do aluno
-export default function AnaliseModal({ visible, ficha, historico, onClose, theme: t }) {
+export default function AnaliseModal({ visible, ficha, historico, cardioLogs, onClose, theme: t }) {
   if (!ficha) return null;
 
   return (
@@ -352,7 +321,7 @@ export default function AnaliseModal({ visible, ficha, historico, onClose, theme
         </View>
 
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-          <AnaliseConteudo ficha={ficha} historico={historico} theme={t} />
+          <AnaliseConteudo ficha={ficha} historico={historico} cardioLogs={cardioLogs} theme={t} />
         </ScrollView>
 
       </SafeAreaView>

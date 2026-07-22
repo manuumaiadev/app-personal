@@ -64,6 +64,7 @@ export default function EditarFichaScreen({ route, navigation }) {
 
   const [nome, setNome] = useState(ficha.nome || '');
   const [semanas, setSemanas] = useState(String(ficha.semanas || 4));
+  const [diasPorSemana, setDiasPorSemana] = useState(String(ficha.diasPorSemana || ''));
   const [periodizacao, setPeriodizacao] = useState(() =>
     Array.from({ length: ficha.semanas || 4 }, (_, i) =>
       normalizarItem((ficha.periodizacao || [])[i])
@@ -132,6 +133,7 @@ export default function EditarFichaScreen({ route, navigation }) {
       await atualizarFicha(ficha.id, {
         nome: nome.trim(),
         semanas: semanasNum,
+        diasPorSemana: parseInt(diasPorSemana) || null,
         dataVencimento: Timestamp.fromDate(vencimento),
         periodizacao,
       });
@@ -230,7 +232,21 @@ export default function EditarFichaScreen({ route, navigation }) {
           }}
         />
 
-        <Text style={[s.secLabel, { marginTop: 24 }]}>PERIODIZACAO — MICROCICLOS</Text>
+        <Text style={[s.secLabel, { marginTop: 20 }]}>META DE FREQUENCIA</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <TextInput
+            style={[s.input, { flex: 1, marginBottom: 0 }]}
+            keyboardType="numeric"
+            value={diasPorSemana}
+            onChangeText={v => setDiasPorSemana(v.replace(/[^0-9]/g, ''))}
+            placeholder="Ex: 4"
+            placeholderTextColor={theme.placeholder}
+            maxLength={1}
+          />
+          <Text style={{ color: theme.textSecondary, fontSize: 14 }}>dias por semana</Text>
+        </View>
+
+        <Text style={[s.secLabel, { marginTop: 4 }]}>PERIODIZACAO — MICROCICLOS</Text>
         <Text style={s.secDesc}>Configure o tipo de treino para cada semana do plano.</Text>
 
         <View style={s.semanasGrid}>

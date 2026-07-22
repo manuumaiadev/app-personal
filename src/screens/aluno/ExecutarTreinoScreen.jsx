@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, Alert, ActivityIndicator,
-  Modal, KeyboardAvoidingView, Platform,
+  Modal, KeyboardAvoidingView, Platform, AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer } from 'expo-audio';
 import * as Notifications from 'expo-notifications';
 import { buildExMetodoMap } from '../../utils/metodosEspeciais';
-import { registrarExecucao } from '../../services/execucoes';
+import { registrarExecucao, listarExecucoesTreino } from '../../services/execucoes';
 import { enviarMensagem } from '../../services/chat';
 import { listarExercicios } from '../../services/exercicios';
 import { useAuth } from '../../context/AuthContext';
@@ -18,11 +18,102 @@ const BEEP = require('../../../assets/beep.wav');
 
 const CYAN = '#06b6d4';
 
-const ESFORCO_OPTS = [
-  { id: 'facil',    label: 'Facil',    color: '#22c55e' },
-  { id: 'moderado', label: 'Moderado', color: '#f59e0b' },
-  { id: 'dificil',  label: 'Dificil',  color: '#ef4444' },
+function lerpColor(hex1, hex2, t) {
+  const p = (h, s, e) => Math.round(parseInt(h.slice(s, e), 16) + (parseInt(hex2.slice(s, e), 16) - parseInt(h.slice(s, e), 16)) * t);
+  return `rgb(${p(hex1,1,3)},${p(hex1,3,5)},${p(hex1,5,7)})`;
+}
+function interpolarCor(v) {
+  if (v <= 50) return lerpColor('#22c55e', '#f59e0b', v / 50);
+  return lerpColor('#f59e0b', '#ef4444', (v - 50) / 50);
+}
+
+const ESFORCO_LABELS = [
+  { pct: 0,   label: 'Leve' },
+  { pct: 50,  label: 'Moderado' },
+  { pct: 100, label: 'Intenso' },
 ];
+
+function EsforcoSlider({ value, onChange, onSave, onDismiss, t }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const cor = interpolarCor(value);
+  const pct = Math.max(0, Math.min(100, value));
+
+  const label = value <= 33 ? 'Leve' : value <= 66 ? 'Moderado' : 'Intenso';
+
+  function calcVal(locationX) {
+    if (!trackWidth) return value;
+    return Math.round(Math.max(0, Math.min(100, (locationX / trackWidth) * 100)));
+  }
+
+  return (
+    <View style={{
+      marginTop: 10, marginBottom: 4,
+      backgroundColor: t.elevated, borderRadius: 14,
+      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10,
+      borderLeftWidth: 3, borderLeftColor: cor,
+      borderTopWidth: 1, borderTopColor: t.border,
+      borderRightWidth: 1, borderRightColor: t.border,
+      borderBottomWidth: 1, borderBottomColor: t.border,
+    }}>
+      {/* Top row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Text style={{ fontSize: 10, fontWeight: '700', color: t.textTertiary, letterSpacing: 0.8 }}>
+          ESFORCO
+        </Text>
+        <View style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+            <Text style={{ fontSize: 26, fontWeight: '900', color: cor, letterSpacing: -1 }}>{value}</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: cor }}>{label}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={onDismiss}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.6}
+        >
+          <Ionicons name="close" size={18} color={t.textTertiary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Track — confirma ao soltar */}
+      <View
+        onLayout={e => setTrackWidth(e.nativeEvent.layout.width)}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={e => onChange(calcVal(e.nativeEvent.locationX))}
+        onResponderMove={e => onChange(calcVal(e.nativeEvent.locationX))}
+        onResponderRelease={e => {
+          const v = calcVal(e.nativeEvent.locationX);
+          onChange(v);
+          onSave(v);
+        }}
+        style={{ height: 44, justifyContent: 'center' }}
+      >
+        <View style={{ height: 5, backgroundColor: t.bg, borderRadius: 3, overflow: 'hidden' }}>
+          <View style={{ height: 5, width: `${pct}%`, backgroundColor: cor, borderRadius: 3 }} />
+        </View>
+        <View style={{
+          position: 'absolute', left: `${pct}%`, marginLeft: -14,
+          width: 28, height: 28, borderRadius: 14,
+          backgroundColor: cor,
+          borderWidth: 3, borderColor: t.elevated,
+          elevation: 6, shadowColor: cor, shadowOpacity: 0.5,
+          shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+          justifyContent: 'center', alignItems: 'center',
+        }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.8)' }} />
+        </View>
+      </View>
+
+      {/* Scale labels */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        {ESFORCO_LABELS.map(({ label: l }) => (
+          <Text key={l} style={{ fontSize: 10, fontWeight: '600', color: t.textTertiary }}>{l}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 function formatTempo(secs) {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -62,8 +153,9 @@ function makeStyles(t) {
       padding: 16, gap: 12,
     },
     exStatusDot: {
-      width: 10, height: 10, borderRadius: 5,
-      borderWidth: 1.5,
+      width: 24, height: 24, borderRadius: 12,
+      borderWidth: 2,
+      justifyContent: 'center', alignItems: 'center',
     },
     exNome: { fontSize: 15, fontWeight: '700', color: t.textPrimary, flex: 1 },
     exMeta: { fontSize: 12, color: t.textSecondary },
@@ -228,7 +320,7 @@ function makeStyles(t) {
 }
 
 export default function ExecutarTreinoScreen({ route, navigation }) {
-  const { treino, ficha } = route.params;
+  const { treino, ficha, comTimer = true, comIntensidade = true } = route.params;
   const { usuario } = useAuth();
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -267,8 +359,16 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
     return m;
   });
 
+  const [comentariosEx, setComentariosEx] = useState({});
+  const [focusedComentario, setFocusedComentario] = useState(null);
+
   // Qual serie aguarda seleção de esforco: { exId, serieIdx } | null
   const [esforcoPrompt, setEsforcoPrompt] = useState(null);
+  const [esforcoSliderValue, setEsforcoSliderValue] = useState(50);
+  const [quickCompleteEx, setQuickCompleteEx] = useState(null);
+  const [quickCompletePeso, setQuickCompletePeso] = useState('');
+  const [quickCompleteGroup, setQuickCompleteGroup] = useState(null);
+  const [quickCompleteGroupPesos, setQuickCompleteGroupPesos] = useState({});
 
   // Accordion: qual exercício está expandido
   const [expandido, setExpandido] = useState(() => {
@@ -286,6 +386,7 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
   const [comentario, setComentario] = useState('');
   const [enviandoComentario, setEnviandoComentario] = useState(false);
   const timerRef = useRef(null);
+  const backgroundAtRef = useRef(null);
 
   const [extrasExercicios, setExtrasExercicios] = useState([]);
   const [banco, setBanco] = useState([]);
@@ -302,7 +403,41 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
   }, []);
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', nextState => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        backgroundAtRef.current = Date.now();
+      } else if (nextState === 'active' && backgroundAtRef.current) {
+        const elapsed = Math.floor((Date.now() - backgroundAtRef.current) / 1000);
+        setTempoTreino(t => t + elapsed);
+        backgroundAtRef.current = null;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     listarExercicios(usuario.uid).then(setBanco).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    listarExecucoesTreino(usuario.uid, treino.id)
+      .then(execs => {
+        if (!execs.length) return;
+        const ultima = execs[0];
+        setCargas(prev => {
+          const next = { ...prev };
+          treino.exercicios?.forEach(ex => {
+            const exData = ultima.exercicios?.find(e => e.id === ex.id);
+            if (!exData?.cargas?.length) return;
+            const numSeries = ex.series || 3;
+            next[ex.id] = Array.from({ length: numSeries }, (_, i) =>
+              exData.cargas[i] ?? exData.cargas[exData.cargas.length - 1] ?? ''
+            );
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -371,10 +506,24 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
       arr[i] = !eraConcluida;
 
       if (!eraConcluida) {
+        // Auto-preenche series vazias seguintes com o peso desta serie
+        const pesoAtual = cargas[exId]?.[i];
+        if (pesoAtual && String(pesoAtual).trim()) {
+          setCargas(prev => {
+            const exCargas = [...(prev[exId] || [])];
+            for (let j = i + 1; j < exCargas.length; j++) {
+              if (!exCargas[j] || !String(exCargas[j]).trim()) {
+                exCargas[j] = pesoAtual;
+              }
+            }
+            return { ...prev, [exId]: exCargas };
+          });
+        }
+
         // Inicia descanso apenas se for standalone ou último do grupo
         const groupInfo = exGroupMap[exId];
         const deveIniciarDescanso = !groupInfo || groupInfo.isLastInGroup;
-        if (deveIniciarDescanso) {
+        if (comTimer && deveIniciarDescanso) {
           const secs = groupInfo?.descansoPorRodada
             ? groupInfo.descansoPorRodada
             : parseDescanso(descanso);
@@ -382,8 +531,11 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           setTimerPausado(false);
           agendarNotifDescanso(secs);
         }
-        // Pede seleção de esforço
-        setEsforcoPrompt({ exId, serieIdx: i });
+        // Pede seleção de esforço (apenas se ativado)
+        if (comIntensidade) {
+          setEsforcoPrompt({ exId, serieIdx: i });
+          setEsforcoSliderValue(50);
+        }
       } else {
         // Desmarcou — remove esforço registrado
         setEsforco(prev2 => {
@@ -398,14 +550,18 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
     });
   }
 
-  function registrarEsforco(nivel) {
+  function salvarEsforco(valor) {
     if (!esforcoPrompt) return;
     const { exId, serieIdx } = esforcoPrompt;
     setEsforco(prev => {
       const arr = [...(prev[exId] || [])];
-      arr[serieIdx] = nivel;
+      arr[serieIdx] = valor;
       return { ...prev, [exId]: arr };
     });
+  }
+
+  function registrarEsforco(valor) {
+    salvarEsforco(valor);
     setEsforcoPrompt(null);
 
     // Auto-colapsa se todas as séries do exercício estão concluídas
@@ -449,6 +605,80 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
 
   const allExercicios = [...(treino.exercicios || []), ...extrasExercicios];
   const totalSeries = allExercicios.reduce((a, ex) => a + (ex.series || 3), 0);
+
+  function completarExercicio(exId, ex, peso) {
+    const numSeries = ex.series || 3;
+    const repsBase = String(ex.reps || '').replace(/[^0-9].*/, '') || '12';
+    if (peso) {
+      const pesoStr = String(peso);
+      setCargas(prev => ({ ...prev, [exId]: Array(numSeries).fill(pesoStr) }));
+      setRepsRealizadas(prev => ({ ...prev, [exId]: Array(numSeries).fill(repsBase) }));
+    }
+    setConcluidas(prev => ({ ...prev, [exId]: Array(numSeries).fill(true) }));
+    setEsforcoPrompt(null);
+    const idx = allExercicios.findIndex(e => e.id === exId);
+    const proximo = allExercicios[idx + 1];
+    setExpandido(proximo ? proximo.id : null);
+  }
+
+  function handleQuickComplete(ex) {
+    const exId = ex.id;
+    const jaConcluido = (concluidas[exId] || []).every(v => v === true)
+      && (concluidas[exId] || []).length === (ex.series || 3);
+    if (jaConcluido) {
+      setConcluidas(prev => ({ ...prev, [exId]: Array(ex.series || 3).fill(false) }));
+      return;
+    }
+    const temPeso = (cargas[exId] || []).some(c => c && String(c).trim());
+    if (temPeso) {
+      completarExercicio(exId, ex, null);
+    } else {
+      setQuickCompleteEx(ex);
+      setQuickCompletePeso('');
+    }
+  }
+
+  function completarGrupo(groupExs, pesos) {
+    groupExs.forEach(ex => {
+      const numSeries = ex.series || 3;
+      const repsBase = String(ex.reps || '').replace(/[^0-9].*/, '') || '12';
+      const peso = pesos?.[ex.id];
+      if (peso && String(peso).trim()) {
+        setCargas(prev => ({ ...prev, [ex.id]: Array(numSeries).fill(String(peso)) }));
+        setRepsRealizadas(prev => ({ ...prev, [ex.id]: Array(numSeries).fill(repsBase) }));
+      }
+      setConcluidas(prev => ({ ...prev, [ex.id]: Array(numSeries).fill(true) }));
+    });
+    setEsforcoPrompt(null);
+    setExpandido(null);
+  }
+
+  function handleQuickCompleteGroup(item) {
+    const { grupoId, groupExs } = item;
+    const allGroupDone = groupExs.every(ex =>
+      (concluidas[ex.id] || []).filter(Boolean).length === (ex.series || 3)
+    );
+    if (allGroupDone) {
+      groupExs.forEach(ex => {
+        setConcluidas(prev => ({ ...prev, [ex.id]: Array(ex.series || 3).fill(false) }));
+      });
+      return;
+    }
+    const todosTemPeso = groupExs.every(ex =>
+      (cargas[ex.id] || []).some(c => c && String(c).trim())
+    );
+    if (todosTemPeso) {
+      completarGrupo(groupExs, {});
+    } else {
+      const pesosIniciais = {};
+      groupExs.forEach(ex => {
+        const existente = (cargas[ex.id] || []).find(c => c && String(c).trim());
+        pesosIniciais[ex.id] = existente ? String(existente) : '';
+      });
+      setQuickCompleteGroup(item);
+      setQuickCompleteGroupPesos(pesosIniciais);
+    }
+  }
   const seriesDone = Object.values(concluidas).flat().filter(Boolean).length;
 
   async function handleFinalizar() {
@@ -469,6 +699,7 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           cargas: cargas[ex.id] || [],
           repsRealizadas: repsRealizadas[ex.id] || [],
           esforco: esforco[ex.id] || [],
+          ...(comentariosEx[ex.id]?.trim() ? { comentario: comentariosEx[ex.id].trim() } : {}),
           ...(ex.isExtra ? { isExtra: true } : {}),
         })),
       });
@@ -501,6 +732,28 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
     [treino.metodosEspeciais]
   );
 
+  const renderItems = useMemo(() => {
+    const processed = new Set();
+    const items = [];
+    for (const ex of allExercicios) {
+      if (processed.has(ex.id)) continue;
+      const gi = exGroupMap[ex.id];
+      if (gi) {
+        if (gi.isFirstInGroup) {
+          const grupo = (treino.metodosEspeciais || []).find(g => g.id === gi.grupoId);
+          const groupExIds = grupo?.exercicioIds || [];
+          const groupExs = groupExIds.map(id => allExercicios.find(e => e.id === id)).filter(Boolean);
+          groupExs.forEach(e => processed.add(e.id));
+          items.push({ type: 'group', grupoId: gi.grupoId, def: gi.def, descansoPorRodada: gi.descansoPorRodada, groupExs });
+        }
+      } else {
+        processed.add(ex.id);
+        items.push({ type: 'single', ex });
+      }
+    }
+    return items;
+  }, [allExercicios, exGroupMap, treino.metodosEspeciais]);
+
   const pct = totalSeries > 0 ? seriesDone / totalSeries : 0;
   const timerPct = timer ? timer.seconds / timer.total : 0;
   const timerDone = timer?.seconds === 0;
@@ -530,152 +783,376 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
           </View>
         </View>
 
-        {allExercicios.map((ex) => {
+        {renderItems.map((item) => {
+          if (item.type === 'group') {
+            const { grupoId, def, groupExs } = item;
+            const isOpen = expandido === grupoId;
+            const maxSeries = Math.max(...groupExs.map(ex => ex.series || 3));
+            const allGroupDone = groupExs.every(ex =>
+              (concluidas[ex.id] || []).filter(Boolean).length === (ex.series || 3)
+            );
+            const doneRounds = Array.from({ length: maxSeries }).filter((_, ri) =>
+              groupExs.every(ex => concluidas[ex.id]?.[ri])
+            ).length;
+            const dotColor = allGroupDone ? CYAN : isOpen ? def.cor : theme.border;
+
+            return (
+              <View key={grupoId}>
+                <View style={[s.exCard, allGroupDone && s.exCardDone, { borderColor: def.cor + '50' }]}>
+
+                  {/* Colored header strip */}
+                  <TouchableOpacity
+                    onPress={() => toggleExpandido(grupoId)}
+                    activeOpacity={0.85}
+                    style={{ backgroundColor: def.cor + '18', padding: 14, borderBottomWidth: 1, borderBottomColor: def.cor + '25' }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: def.cor, justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="flash" size={13} color="#fff" />
+                          </View>
+                          <Text style={{ fontSize: 15, fontWeight: '800', color: def.cor, letterSpacing: 0.2 }}>
+                            {def.label.toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: def.cor + 'cc', fontWeight: '500' }}>
+                          {def.descricao}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        <View style={{ backgroundColor: allGroupDone ? CYAN + '25' : def.cor + '25', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: allGroupDone ? CYAN : def.cor }}>
+                            {allGroupDone ? 'Concluido' : doneRounds > 0 ? `${doneRounds}/${maxSeries} rodadas` : `${maxSeries} rodadas`}
+                          </Text>
+                        </View>
+                        <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={def.cor + 'aa'} />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Exercise list (collapsed view) */}
+                  <TouchableOpacity
+                    onPress={() => toggleExpandido(grupoId)}
+                    activeOpacity={0.75}
+                    style={{ padding: 14, paddingBottom: isOpen ? 6 : 14 }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                      <TouchableOpacity
+                        style={[s.exStatusDot, { backgroundColor: allGroupDone ? CYAN : 'transparent', borderColor: dotColor, marginTop: 2 }]}
+                        onPress={() => handleQuickCompleteGroup(item)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        {allGroupDone && <Ionicons name="checkmark" size={14} color="#fff" />}
+                      </TouchableOpacity>
+                      <View style={{ flex: 1, gap: 6 }}>
+                        {groupExs.map((ex, ei) => (
+                          <View key={ex.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: def.cor + '20', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '800', color: def.cor }}>{ei + 1}</Text>
+                            </View>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textPrimary, flex: 1 }} numberOfLines={1}>
+                              {ex.nome}
+                            </Text>
+                            <Text style={{ fontSize: 11, color: theme.textTertiary }}>{ex.series}x{ex.reps}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      {allGroupDone && <Ionicons name="checkmark-circle" size={20} color={CYAN} style={{ marginTop: 2 }} />}
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Comments per exercise when all done */}
+                  {allGroupDone && groupExs.map(ex => {
+                    const texto = comentariosEx[ex.id];
+                    const aberto = focusedComentario === ex.id;
+                    return (
+                      <View key={ex.id} style={{ paddingHorizontal: 16, paddingBottom: 8, paddingTop: 2 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: theme.textTertiary, marginBottom: 4, letterSpacing: 0.4 }}>
+                          {ex.nome.toUpperCase()}
+                        </Text>
+                        {aberto ? (
+                          <TextInput
+                            autoFocus
+                            style={{ backgroundColor: theme.elevated, borderRadius: 8, borderWidth: 1, borderColor: theme.border, padding: 10, fontSize: 13, color: theme.textPrimary, minHeight: 48, textAlignVertical: 'top' }}
+                            placeholder="Observacao sobre este exercicio..."
+                            placeholderTextColor={theme.placeholder}
+                            value={texto || ''}
+                            onChangeText={v => setComentariosEx(prev => ({ ...prev, [ex.id]: v }))}
+                            onBlur={() => {
+                              setFocusedComentario(null);
+                              if (!comentariosEx[ex.id]?.trim()) {
+                                setComentariosEx(prev => { const next = { ...prev }; delete next[ex.id]; return next; });
+                              }
+                            }}
+                            multiline
+                          />
+                        ) : texto?.trim() ? (
+                          <TouchableOpacity onPress={() => setFocusedComentario(ex.id)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }} activeOpacity={0.7}>
+                            <Ionicons name="chatbubble" size={13} color={CYAN} style={{ marginTop: 2 }} />
+                            <Text style={{ fontSize: 13, color: theme.textSecondary, flex: 1 }} numberOfLines={2}>{texto}</Text>
+                            <Ionicons name="pencil-outline" size={13} color={theme.textTertiary} />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            onPress={() => { setComentariosEx(prev => ({ ...prev, [ex.id]: '' })); setFocusedComentario(ex.id); }}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name="chatbubble-outline" size={14} color={theme.textTertiary} />
+                            <Text style={{ fontSize: 13, color: theme.textTertiary, fontWeight: '500' }}>Adicionar observacao</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {/* Body: rounds staggered */}
+                  {isOpen && (
+                    <View style={[s.exBody, { paddingTop: 4 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', paddingBottom: 4 }}>
+                        <View style={{ flex: 1 }} />
+                        <Text style={s.serieHeaderKg}>KG</Text>
+                        <View style={{ width: 8 }} />
+                        <Text style={s.serieHeaderReps}>REPS</Text>
+                        <View style={{ width: 32 }} />
+                      </View>
+
+                      {Array.from({ length: maxSeries }).map((_, roundIdx) => {
+                        const roundDone = groupExs.every(ex => concluidas[ex.id]?.[roundIdx]);
+                        return (
+                          <View key={roundIdx} style={{ marginBottom: 14 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                              <View style={{ height: 1, flex: 1, backgroundColor: theme.border }} />
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: roundDone ? CYAN : theme.textTertiary, letterSpacing: 0.6 }}>
+                                RODADA {roundIdx + 1}
+                              </Text>
+                              <View style={{ height: 1, flex: 1, backgroundColor: theme.border }} />
+                            </View>
+
+                            {groupExs.map(ex => {
+                              const done = !!concluidas[ex.id]?.[roundIdx];
+                              const mostrarEsforco = esforcoPrompt?.exId === ex.id && esforcoPrompt?.serieIdx === roundIdx;
+                              const eforcoDaSerie = esforco[ex.id]?.[roundIdx];
+                              return (
+                                <View key={ex.id} style={{ marginBottom: 8 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '600', color: done ? CYAN : theme.textSecondary, marginBottom: 3, paddingLeft: 2 }}>
+                                    {ex.nome}
+                                  </Text>
+                                  <View style={[s.serieRow, done && s.serieRowDone]}>
+                                    <View style={{ flex: 1 }} />
+                                    <TextInput
+                                      style={[s.inputKg, done && { borderColor: CYAN + '40' }]}
+                                      placeholder="—"
+                                      placeholderTextColor={theme.textTertiary}
+                                      keyboardType="decimal-pad"
+                                      value={cargas[ex.id]?.[roundIdx] || ''}
+                                      onChangeText={v => setCarga(ex.id, roundIdx, v)}
+                                      editable={!done}
+                                    />
+                                    <Text style={s.sep}>×</Text>
+                                    <TextInput
+                                      style={[s.inputReps, done && { borderColor: CYAN + '40' }]}
+                                      keyboardType="number-pad"
+                                      value={repsRealizadas[ex.id]?.[roundIdx] || ''}
+                                      onChangeText={v => setReps(ex.id, roundIdx, v)}
+                                      editable={!done}
+                                    />
+                                    <TouchableOpacity
+                                      style={[s.checkBtn, done ? { backgroundColor: CYAN, borderColor: CYAN } : { backgroundColor: 'transparent', borderColor: theme.border }]}
+                                      onPress={() => toggleSerie(ex.id, roundIdx, ex.descanso)}
+                                      activeOpacity={0.7}
+                                    >
+                                      {done && <Ionicons name="checkmark" size={15} color="#fff" />}
+                                    </TouchableOpacity>
+                                  </View>
+                                  {mostrarEsforco && (
+                                    <EsforcoSlider value={esforcoSliderValue} onChange={setEsforcoSliderValue} onSave={salvarEsforco} onDismiss={() => setEsforcoPrompt(null)} t={theme} />
+                                  )}
+                                  {done && !mostrarEsforco && eforcoDaSerie != null && (() => {
+                                    const v = typeof eforcoDaSerie === 'number' ? eforcoDaSerie : { facil: 33, moderado: 66, dificil: 100 }[eforcoDaSerie] ?? null;
+                                    if (v === null) return null;
+                                    const cor = interpolarCor(v);
+                                    return (
+                                      <View style={{ alignItems: 'flex-end', marginTop: -2, marginBottom: 2 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: cor + '15', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                          <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: cor }} />
+                                          <Text style={{ fontSize: 10, fontWeight: '800', color: cor }}>{v}</Text>
+                                          <Text style={{ fontSize: 9, fontWeight: '600', color: cor + 'aa' }}>/100</Text>
+                                        </View>
+                                      </View>
+                                    );
+                                  })()}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          }
+
+          // Single exercise card
+          const ex = item.ex;
           const exConcluidas = concluidas[ex.id] || [];
           const exDone = exConcluidas.filter(Boolean).length;
           const allDone = exDone === (ex.series || 3);
           const isOpen = expandido === ex.id;
           const dotColor = allDone ? CYAN : isOpen ? theme.red : theme.border;
-          const groupInfo = exGroupMap[ex.id];
 
           return (
             <View key={ex.id}>
-              {/* Cabeçalho de grupo — exibido apenas no primeiro exercício */}
-              {groupInfo?.isFirstInGroup && (
-                <View style={[s.grupoHeader, { backgroundColor: groupInfo.def.cor + '18' }]}>
-                  <Ionicons name="flash" size={12} color={groupInfo.def.cor} />
-                  <Text style={[s.grupoHeaderTexto, { color: groupInfo.def.cor }]}>
-                    {groupInfo.def.label}
-                  </Text>
-                  <Text style={[s.grupoHeaderSub, { color: groupInfo.def.cor + 'aa' }]}>
-                    · Descanso so apos a rodada completa
-                  </Text>
-                </View>
-              )}
-            <View style={[s.exCard, allDone && s.exCardDone, groupInfo && { borderColor: groupInfo.def.cor + '40' }]}>
-              {/* Accordion header */}
-              <TouchableOpacity
-                style={s.exCardHeader}
-                onPress={() => toggleExpandido(ex.id)}
-                activeOpacity={0.75}
-              >
-                <View style={[s.exStatusDot, { backgroundColor: allDone ? CYAN : 'transparent', borderColor: dotColor }]} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={s.exNome}>{ex.nome}</Text>
-                    {ex.isExtra && (
-                      <View style={{ backgroundColor: theme.elevated, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                        <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.3 }}>EXTRA</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <Text style={s.exMeta}>
-                      {ex.series} series · {ex.reps} reps
-                      {allDone ? '  — concluido' : isOpen ? '  — em andamento' : ''}
-                    </Text>
-                    {ex.observacao ? (
-                      <Ionicons name="chatbubble-ellipses-outline" size={12} color={theme.textTertiary} />
-                    ) : null}
-                  </View>
-                </View>
-                {allDone
-                  ? <Ionicons name="checkmark-circle" size={20} color={CYAN} />
-                  : <Ionicons
-                      name={isOpen ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={theme.textTertiary}
-                      style={s.exChevron}
-                    />
-                }
-              </TouchableOpacity>
-
-              {/* Accordion body */}
-              {isOpen && (
-                <View style={s.exBody}>
-                  {ex.observacao ? <Text style={s.exObs}>{ex.observacao}</Text> : null}
-
-                  <View style={s.serieHeaderRow}>
-                    <Text style={s.serieHeaderNum} />
-                    <Text style={s.serieHeaderKg}>KG</Text>
-                    <Text style={[s.serieHeaderKg, { width: 8 }]} />
-                    <Text style={s.serieHeaderReps}>REPS</Text>
-                    <View style={{ width: 32 }} />
-                  </View>
-
-                  {Array.from({ length: ex.series || 3 }).map((_, i) => {
-                    const done = exConcluidas[i];
-                    const mostrarEsforco = esforcoPrompt?.exId === ex.id && esforcoPrompt?.serieIdx === i;
-                    const eforcoDaSerie = esforco[ex.id]?.[i];
-
-                    return (
-                      <View key={i}>
-                        <View style={[s.serieRow, done && s.serieRowDone]}>
-                          <Text style={s.serieNum}>{i + 1}</Text>
-                          <TextInput
-                            style={[s.inputKg, done && { borderColor: CYAN + '40' }]}
-                            placeholder="—"
-                            placeholderTextColor={theme.textTertiary}
-                            keyboardType="decimal-pad"
-                            value={cargas[ex.id]?.[i] || ''}
-                            onChangeText={v => setCarga(ex.id, i, v)}
-                            editable={!done}
-                          />
-                          <Text style={s.sep}>×</Text>
-                          <TextInput
-                            style={[s.inputReps, done && { borderColor: CYAN + '40' }]}
-                            keyboardType="number-pad"
-                            value={repsRealizadas[ex.id]?.[i] || ''}
-                            onChangeText={v => setReps(ex.id, i, v)}
-                            editable={!done}
-                          />
-                          <TouchableOpacity
-                            style={[
-                              s.checkBtn,
-                              done
-                                ? { backgroundColor: CYAN, borderColor: CYAN }
-                                : { backgroundColor: 'transparent', borderColor: theme.border },
-                            ]}
-                            onPress={() => toggleSerie(ex.id, i, ex.descanso)}
-                            activeOpacity={0.7}
-                          >
-                            {done && <Ionicons name="checkmark" size={15} color="#fff" />}
-                          </TouchableOpacity>
+              <View style={[s.exCard, allDone && s.exCardDone]}>
+                {/* Accordion header */}
+                <TouchableOpacity style={s.exCardHeader} onPress={() => toggleExpandido(ex.id)} activeOpacity={0.75}>
+                  <TouchableOpacity
+                    style={[s.exStatusDot, { backgroundColor: allDone ? CYAN : 'transparent', borderColor: dotColor }]}
+                    onPress={() => handleQuickComplete(ex)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    {allDone && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={s.exNome}>{ex.nome}</Text>
+                      {ex.isExtra && (
+                        <View style={{ backgroundColor: theme.elevated, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.3 }}>EXTRA</Text>
                         </View>
-
-                        {/* Seletor de esforco — aparece logo apos marcar como concluida */}
-                        {mostrarEsforco && (
-                          <View style={s.esforcoRow}>
-                            {ESFORCO_OPTS.map(opt => (
-                              <TouchableOpacity
-                                key={opt.id}
-                                style={[s.esforcoBtn, { borderColor: opt.color, backgroundColor: opt.color + '15' }]}
-                                onPress={() => registrarEsforco(opt.id)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[s.esforcoTexto, { color: opt.color }]}>{opt.label}</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        )}
-
-                        {/* Badge de esforco registrado (serie concluida e sem prompt aberto) */}
-                        {done && !mostrarEsforco && eforcoDaSerie && (() => {
-                          const opt = ESFORCO_OPTS.find(o => o.id === eforcoDaSerie);
-                          return (
-                            <View style={{ alignItems: 'flex-end', marginTop: -2, marginBottom: 2 }}>
-                              <Text style={{ fontSize: 10, color: opt.color, fontWeight: '700' }}>
-                                {opt.label}
-                              </Text>
-                            </View>
-                          );
-                        })()}
+                      )}
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={s.exMeta}>
+                        {ex.series} series · {ex.reps} reps
+                        {allDone ? '  — concluido' : isOpen ? '  — em andamento' : ''}
+                      </Text>
+                      {ex.observacao ? (
+                        <Ionicons name="chatbubble-ellipses-outline" size={12} color={theme.textTertiary} />
+                      ) : null}
+                    </View>
+                  </View>
+                  {allDone
+                    ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {comentariosEx[ex.id]?.trim() ? (
+                          <Ionicons name="chatbubble" size={14} color={CYAN} />
+                        ) : null}
+                        <Ionicons name="checkmark-circle" size={20} color={CYAN} />
                       </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
+                    : <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textTertiary} style={s.exChevron} />
+                  }
+                </TouchableOpacity>
+
+                {/* Comentario — visivel sempre que concluido */}
+                {allDone && (() => {
+                  const texto = comentariosEx[ex.id];
+                  const aberto = focusedComentario === ex.id;
+                  return (
+                    <View style={{ paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4 }}>
+                      {aberto ? (
+                        <TextInput
+                          autoFocus
+                          style={{ backgroundColor: theme.elevated, borderRadius: 8, borderWidth: 1, borderColor: theme.border, padding: 10, fontSize: 13, color: theme.textPrimary, minHeight: 56, textAlignVertical: 'top' }}
+                          placeholder="Observacao sobre este exercicio..."
+                          placeholderTextColor={theme.placeholder}
+                          value={texto || ''}
+                          onChangeText={v => setComentariosEx(prev => ({ ...prev, [ex.id]: v }))}
+                          onBlur={() => {
+                            setFocusedComentario(null);
+                            if (!comentariosEx[ex.id]?.trim()) {
+                              setComentariosEx(prev => { const next = { ...prev }; delete next[ex.id]; return next; });
+                            }
+                          }}
+                          multiline
+                        />
+                      ) : texto?.trim() ? (
+                        <TouchableOpacity onPress={() => setFocusedComentario(ex.id)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }} activeOpacity={0.7}>
+                          <Ionicons name="chatbubble" size={13} color={CYAN} style={{ marginTop: 2 }} />
+                          <Text style={{ fontSize: 13, color: theme.textSecondary, flex: 1 }} numberOfLines={2}>{texto}</Text>
+                          <Ionicons name="pencil-outline" size={13} color={theme.textTertiary} />
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => { setComentariosEx(prev => ({ ...prev, [ex.id]: '' })); setFocusedComentario(ex.id); }}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="chatbubble-outline" size={14} color={theme.textTertiary} />
+                          <Text style={{ fontSize: 13, color: theme.textTertiary, fontWeight: '500' }}>Adicionar observacao</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })()}
+
+                {/* Accordion body — series */}
+                {isOpen && (
+                  <View style={s.exBody}>
+                    {ex.observacao ? <Text style={s.exObs}>{ex.observacao}</Text> : null}
+                    <View style={s.serieHeaderRow}>
+                      <Text style={s.serieHeaderNum} />
+                      <Text style={s.serieHeaderKg}>KG</Text>
+                      <Text style={[s.serieHeaderKg, { width: 8 }]} />
+                      <Text style={s.serieHeaderReps}>REPS</Text>
+                      <View style={{ width: 32 }} />
+                    </View>
+                    {Array.from({ length: ex.series || 3 }).map((_, i) => {
+                      const done = exConcluidas[i];
+                      const mostrarEsforco = esforcoPrompt?.exId === ex.id && esforcoPrompt?.serieIdx === i;
+                      const eforcoDaSerie = esforco[ex.id]?.[i];
+                      return (
+                        <View key={i}>
+                          <View style={[s.serieRow, done && s.serieRowDone]}>
+                            <Text style={s.serieNum}>{i + 1}</Text>
+                            <TextInput
+                              style={[s.inputKg, done && { borderColor: CYAN + '40' }]}
+                              placeholder="—"
+                              placeholderTextColor={theme.textTertiary}
+                              keyboardType="decimal-pad"
+                              value={cargas[ex.id]?.[i] || ''}
+                              onChangeText={v => setCarga(ex.id, i, v)}
+                              editable={!done}
+                            />
+                            <Text style={s.sep}>×</Text>
+                            <TextInput
+                              style={[s.inputReps, done && { borderColor: CYAN + '40' }]}
+                              keyboardType="number-pad"
+                              value={repsRealizadas[ex.id]?.[i] || ''}
+                              onChangeText={v => setReps(ex.id, i, v)}
+                              editable={!done}
+                            />
+                            <TouchableOpacity
+                              style={[s.checkBtn, done ? { backgroundColor: CYAN, borderColor: CYAN } : { backgroundColor: 'transparent', borderColor: theme.border }]}
+                              onPress={() => toggleSerie(ex.id, i, ex.descanso)}
+                              activeOpacity={0.7}
+                            >
+                              {done && <Ionicons name="checkmark" size={15} color="#fff" />}
+                            </TouchableOpacity>
+                          </View>
+                          {mostrarEsforco && (
+                            <EsforcoSlider value={esforcoSliderValue} onChange={setEsforcoSliderValue} onSave={salvarEsforco} onDismiss={() => setEsforcoPrompt(null)} t={theme} />
+                          )}
+                          {done && !mostrarEsforco && eforcoDaSerie != null && (() => {
+                            const v = typeof eforcoDaSerie === 'number' ? eforcoDaSerie : { facil: 33, moderado: 66, dificil: 100 }[eforcoDaSerie] ?? null;
+                            if (v === null) return null;
+                            const cor = interpolarCor(v);
+                            return (
+                              <View style={{ alignItems: 'flex-end', marginTop: -2, marginBottom: 2 }}>
+                                <Text style={{ fontSize: 10, color: cor, fontWeight: '700' }}>Esforco {v}/100</Text>
+                              </View>
+                            );
+                          })()}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
             </View>
           );
         })}
@@ -899,6 +1376,117 @@ export default function ExecutarTreinoScreen({ route, navigation }) {
                 <Text style={s.btnPularTexto}>Fechar sem comentar</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal — concluir grupo rapidamente */}
+      <Modal
+        visible={quickCompleteGroup !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuickCompleteGroup(null)}
+      >
+        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView style={[s.extraSheet, { maxHeight: '80%' }]} keyboardShouldPersistTaps="handled" bounces={false}>
+            <View style={s.extraHandle} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: (quickCompleteGroup?.def.cor || '#8b5cf6') + '18', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Ionicons name="flash" size={11} color={quickCompleteGroup?.def.cor || '#8b5cf6'} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: quickCompleteGroup?.def.cor || '#8b5cf6' }}>
+                  {quickCompleteGroup?.def.label}
+                </Text>
+              </View>
+            </View>
+            <Text style={[s.extraTitulo, { marginBottom: 16 }]}>Qual foi o peso usado?</Text>
+
+            {(quickCompleteGroup?.groupExs || []).map(ex => (
+              <View key={ex.id} style={{ marginBottom: 14 }}>
+                <Text style={s.extraLabel}>{ex.nome.toUpperCase()}</Text>
+                <TextInput
+                  style={s.extraInput}
+                  placeholder="Ex: 20 kg"
+                  placeholderTextColor={theme.placeholder}
+                  keyboardType="decimal-pad"
+                  value={quickCompleteGroupPesos[ex.id] || ''}
+                  onChangeText={v => setQuickCompleteGroupPesos(prev => ({ ...prev, [ex.id]: v }))}
+                />
+              </View>
+            ))}
+
+            <TouchableOpacity
+              style={[s.btnConcluir, { marginBottom: 10, marginTop: 4 }]}
+              onPress={() => {
+                completarGrupo(quickCompleteGroup.groupExs, quickCompleteGroupPesos);
+                setQuickCompleteGroup(null);
+              }}
+            >
+              <Text style={s.btnConcluirTexto}>Concluir exercicios</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.btnPular, { marginBottom: 16 }]}
+              onPress={() => {
+                completarGrupo(quickCompleteGroup.groupExs, {});
+                setQuickCompleteGroup(null);
+              }}
+            >
+              <Text style={s.btnPularTexto}>Concluir sem informar pesos</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal — concluir exercicio rapidamente */}
+      <Modal
+        visible={quickCompleteEx !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuickCompleteEx(null)}
+      >
+        <KeyboardAvoidingView
+          style={s.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={[s.extraSheet, { paddingBottom: 32 }]}>
+            <View style={s.extraHandle} />
+            <Text style={[s.extraTitulo, { marginBottom: 4 }]}>
+              {quickCompleteEx?.nome}
+            </Text>
+            <Text style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 20 }}>
+              {quickCompleteEx?.series || 3} series x {quickCompleteEx?.reps || '12'} reps
+            </Text>
+
+            <Text style={s.extraLabel}>QUAL FOI O PESO USADO? (kg)</Text>
+            <TextInput
+              style={[s.extraInput, { marginBottom: 16 }]}
+              placeholder="Ex: 20"
+              placeholderTextColor={theme.placeholder}
+              keyboardType="decimal-pad"
+              value={quickCompletePeso}
+              onChangeText={setQuickCompletePeso}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={[s.btnConcluir, { marginBottom: 10 }]}
+              onPress={() => {
+                completarExercicio(quickCompleteEx.id, quickCompleteEx, quickCompletePeso);
+                setQuickCompleteEx(null);
+              }}
+              disabled={!quickCompletePeso.trim()}
+            >
+              <Text style={s.btnConcluirTexto}>Concluir exercicio</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.btnPular}
+              onPress={() => {
+                completarExercicio(quickCompleteEx.id, quickCompleteEx, null);
+                setQuickCompleteEx(null);
+              }}
+            >
+              <Text style={s.btnPularTexto}>Concluir sem informar peso</Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
