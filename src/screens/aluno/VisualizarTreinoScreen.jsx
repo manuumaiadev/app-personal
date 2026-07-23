@@ -1,9 +1,18 @@
-import { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, ScrollView, Switch, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { TIPOS_PERIOD } from '../../utils/periodizacao';
+
+const PERIOD_DESC = {
+  adaptativa:  'Fase inicial para adaptacao ao treino.',
+  resistencia: 'Cargas moderadas para resistencia muscular.',
+  hipertrofia: 'Volume elevado para maximizar crescimento.',
+  forca:       'Cargas pesadas para forca maxima.',
+  regenerativa:'Movimentos leves. Corpo descansando.',
+  deload:      'Semana de descarga. Volume reduzido.',
+};
 
 function semanaAtual(ficha) {
   const inicio = ficha.criadoEm?.toDate?.();
@@ -13,16 +22,18 @@ function semanaAtual(ficha) {
   return Math.max(0, Math.min(idx, (ficha.semanas || 1) - 1));
 }
 
-// Busca periodizacao em todos os treinos da ficha (mesma logica do InicioScreen)
-function periodizacaoDaSemana(treinos, semanaIdx) {
-  for (const t of treinos) {
-    const item = (t.periodizacao || [])[semanaIdx];
-    if (!item) continue;
-    const tipo = typeof item === 'string' ? item : item.tipo;
-    const found = TIPOS_PERIOD.find(p => p.id === tipo);
-    if (found) return { tipo: found, series: item.series, reps: item.reps, carga: item.carga };
-  }
-  return null;
+function resolverPeriod(ficha, semanaIdx) {
+  const item = (ficha.periodizacao || [])[semanaIdx];
+  if (!item) return null;
+  const tipoId = typeof item === 'string' ? item : item.tipo;
+  const tipo = TIPOS_PERIOD.find(p => p.id === tipoId);
+  if (!tipo) return null;
+  return {
+    tipo,
+    series: (typeof item === 'object' && item.series) || tipo.series,
+    reps: (typeof item === 'object' && item.reps) || tipo.reps,
+    carga: (typeof item === 'object' && item.carga) || tipo.carga,
+  };
 }
 
 function makeStyles(t) {
@@ -92,9 +103,21 @@ export default function VisualizarTreinoScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
 
   const semanaIdx = semanaAtual(ficha);
-  // usa todos os treinos da ficha para encontrar a periodizacao (ficha.treinos vem do InicioScreen)
-  const todosTreinos = ficha.treinos?.length ? ficha.treinos : [treino];
-  const period = periodizacaoDaSemana(todosTreinos, semanaIdx);
+  const period = resolverPeriod(ficha, semanaIdx);
+  const [comTimer, setComTimer] = useState(false);
+  const [comIntensidade, setComIntensidade] = useState(true);
+
+  const treinoParaExecutar = useMemo(() => {
+    if (!period) return treino;
+    return {
+      ...treino,
+      exercicios: (treino.exercicios || []).map(ex => ({
+        ...ex,
+        series: parseInt(period.series) || ex.series,
+        reps: period.reps || ex.reps,
+      })),
+    };
+  }, [treino, period]);
 
   return (
     <View style={s.root}>
@@ -115,30 +138,33 @@ export default function VisualizarTreinoScreen({ route, navigation }) {
 
         {/* Periodizacao da semana */}
         {period && (
-          <View style={[s.periodCard, { backgroundColor: period.tipo.cor + '12', borderColor: period.tipo.cor + '30' }]}>
-            <View style={[s.periodIconBox, { backgroundColor: period.tipo.cor + '20' }]}>
-              <Ionicons name={period.tipo.icon} size={22} color={period.tipo.cor} />
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+            backgroundColor: period.tipo.cor + '12',
+            borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12,
+            borderWidth: 1, borderColor: period.tipo.cor + '30',
+          }}>
+            <View style={{
+              width: 34, height: 34, borderRadius: 9,
+              backgroundColor: period.tipo.cor + '20',
+              justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+            }}>
+              <Ionicons name={period.tipo.icon} size={17} color={period.tipo.cor} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.periodSemana}>Semana {semanaIdx + 1}</Text>
-              <Text style={[s.periodTipo, { color: period.tipo.cor }]}>{period.tipo.label}</Text>
-              <View style={s.periodDetRow}>
-                {period.series && (
-                  <View style={s.periodChip}>
-                    <Text style={s.periodChipTexto}>{period.series} series</Text>
-                  </View>
-                )}
-                {period.reps && (
-                  <View style={s.periodChip}>
-                    <Text style={s.periodChipTexto}>{period.reps} reps</Text>
-                  </View>
-                )}
-                {period.carga && (
-                  <View style={s.periodChip}>
-                    <Text style={s.periodChipTexto}>{period.carga}% carga</Text>
-                  </View>
-                )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: period.tipo.cor }}>{period.tipo.label}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: period.tipo.cor + 'aa' }}>· Semana {semanaIdx + 1}</Text>
               </View>
+              {(PERIOD_DESC[period.tipo.id] || period.carga) && (
+                <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                  {[
+                    PERIOD_DESC[period.tipo.id],
+                    period.carga && `${period.carga}% carga`,
+                  ].filter(Boolean).join('  ·  ')}
+                </Text>
+              )}
             </View>
           </View>
         )}
@@ -164,16 +190,20 @@ export default function VisualizarTreinoScreen({ route, navigation }) {
                 <Text style={s.exGrupo}>{ex.grupoMuscular}</Text>
               )}
               <View style={s.exMeta}>
-                {ex.series && (
-                  <View style={s.metaChip}>
-                    <Ionicons name="repeat-outline" size={12} color={theme.textSecondary} />
-                    <Text style={s.metaTexto}>{ex.series} series</Text>
+                {(period?.series || ex.series) && (
+                  <View style={[s.metaChip, period?.series && { backgroundColor: period.tipo.cor + '15' }]}>
+                    <Ionicons name="repeat-outline" size={12} color={period?.series ? period.tipo.cor : theme.textSecondary} />
+                    <Text style={[s.metaTexto, period?.series && { color: period.tipo.cor, fontWeight: '700' }]}>
+                      {period?.series || ex.series} series
+                    </Text>
                   </View>
                 )}
-                {ex.reps && (
-                  <View style={s.metaChip}>
-                    <Ionicons name="flash-outline" size={12} color={theme.textSecondary} />
-                    <Text style={s.metaTexto}>{ex.reps} reps</Text>
+                {(period?.reps || ex.reps) && (
+                  <View style={[s.metaChip, period?.reps && { backgroundColor: period.tipo.cor + '15' }]}>
+                    <Ionicons name="flash-outline" size={12} color={period?.reps ? period.tipo.cor : theme.textSecondary} />
+                    <Text style={[s.metaTexto, period?.reps && { color: period.tipo.cor, fontWeight: '700' }]}>
+                      {period?.reps || ex.reps} reps
+                    </Text>
                   </View>
                 )}
                 {ex.descanso && (
@@ -190,9 +220,41 @@ export default function VisualizarTreinoScreen({ route, navigation }) {
 
       {/* Footer fixo sem sobreposicao da tab bar */}
       <View style={[s.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 12,
+          marginBottom: 12,
+        }}>
+          <Ionicons name="stopwatch-outline" size={18} color={comTimer ? '#06b6d4' : theme.textTertiary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textPrimary }}>Timer de descanso</Text>
+            <Text style={{ fontSize: 11, color: theme.textSecondary }}>Cronometro entre series</Text>
+          </View>
+          <Switch
+            value={comTimer}
+            onValueChange={setComTimer}
+            trackColor={{ false: theme.border, true: '#06b6d4' }}
+            thumbColor="#fff"
+            ios_backgroundColor={theme.border}
+          />
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <Ionicons name="bar-chart-outline" size={18} color={comIntensidade ? '#06b6d4' : theme.textTertiary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textPrimary }}>Classificar intensidade</Text>
+            <Text style={{ fontSize: 11, color: theme.textSecondary }}>Avaliamos melhor seu indice de rendimento com esses dados</Text>
+          </View>
+          <Switch
+            value={comIntensidade}
+            onValueChange={setComIntensidade}
+            trackColor={{ false: theme.border, true: '#06b6d4' }}
+            thumbColor="#fff"
+            ios_backgroundColor={theme.border}
+          />
+        </View>
         <TouchableOpacity
           style={s.btnIniciar}
-          onPress={() => navigation.replace('ExecutarTreino', { treino, ficha })}
+          onPress={() => navigation.replace('ExecutarTreino', { treino: treinoParaExecutar, ficha, comTimer, comIntensidade })}
         >
           <Ionicons name="play" size={18} color="#fff" />
           <Text style={s.btnIniciarTexto}>Iniciar treino</Text>

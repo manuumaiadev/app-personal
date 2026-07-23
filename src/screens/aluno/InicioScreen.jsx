@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
 import { TIPOS_PERIOD } from '../../utils/periodizacao';
+import { AnaliseConteudo } from './AnaliseModal';
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const DIAS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
@@ -246,20 +247,6 @@ function Dashboard({ historico }) {
         </View>
       </View>
 
-      {historico.length > 0 && (
-        <View style={dash.intensWrap}>
-          <View style={dash.intensHeader}>
-            <Text style={dash.intensTitle}>ULTIMO TREINO</Text>
-            <Text style={[dash.intensBadge, { color: intensidadeCor }]}>{intensidadeLabel}</Text>
-          </View>
-          <View style={dash.barBg}>
-            <View style={[dash.barFill, { width: `${intensidade}%`, backgroundColor: intensidadeCor }]} />
-          </View>
-          {mediaCarga > 0 && (
-            <Text style={dash.mediaCarga}>{mediaCarga} kg media de carga</Text>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -293,7 +280,7 @@ export default function InicioScreen({ navigation }) {
             }
           });
 
-          const fichasAtivas = fichas.filter(f => f.dataVencimento);
+          const fichasAtivas = fichas.filter(f => f.dataVencimento && calcularStatusFicha(f.dataVencimento) !== 'vencida');
           const comTreinos = await Promise.all(
             fichasAtivas.map(async f => {
               const treinos = await listarTreinosFicha(f.id);
@@ -345,7 +332,8 @@ export default function InicioScreen({ navigation }) {
           <Text style={s.semFichaSubtitulo}>Aguarde seu personal trainer criar sua ficha.</Text>
         </View>
       ) : (
-        fichasComTreinos.map(ficha => {
+        <>
+          {fichasComTreinos.map(ficha => {
           const status = calcularStatusFicha(ficha.dataVencimento);
           const { pct, diasRestantes } = ficha.criadoEm
             ? calcularProgresso(ficha.criadoEm, ficha.dataVencimento)
@@ -414,10 +402,20 @@ export default function InicioScreen({ navigation }) {
 
             </View>
           );
-        })
+          })}
+        </>
       )}
 
       <Dashboard historico={historico} />
+
+      {fichasComTreinos.length > 0 && (
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: C.textTertiary, letterSpacing: 0.8, marginBottom: 12 }}>
+            ANALISE GERAL
+          </Text>
+          <AnaliseConteudo ficha={fichasComTreinos[0]} historico={historico} theme={C} />
+        </View>
+      )}
 
     </ScrollView>
   );

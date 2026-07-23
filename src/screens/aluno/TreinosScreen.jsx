@@ -9,11 +9,25 @@ import { useTheme } from '../../context/ThemeContext';
 import { listarFichasAluno } from '../../services/fichas';
 import { listarTreinosFicha } from '../../services/treinos';
 import { listarHistoricoAluno } from '../../services/execucoes';
-import { calcularStatusFicha, calcularProgresso, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
+import { calcularStatusFicha, CORES_STATUS, LABELS_STATUS } from '../../utils/fichaStatus';
 import { TIPOS_PERIOD } from '../../utils/periodizacao';
 import AnaliseModal from './AnaliseModal';
 
-const DIAS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+function proximoTreinoLetra(ficha, historico) {
+  const letras = (ficha.treinos || []).map(t => t.letra).sort();
+  if (!letras.length) return null;
+  const ultima = historico.find(h => h.fichaId === ficha.id);
+  if (!ultima?.letra) return letras[0];
+  const idx = letras.indexOf(ultima.letra);
+  return letras[(idx + 1) % letras.length];
+}
+
+function inicioSemanaAtual() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
 
 const PERIOD_DESC = {
   adaptativa: 'Fase inicial para adaptacao ao treino.',
@@ -54,12 +68,33 @@ function todasSemanas(ficha) {
   }));
 }
 
-const ESFORCO_VALOR_T = { facil: 33, moderado: 66, dificil: 100 };
+function calcularProgressoFrequencia(ficha, historico) {
+  const inicio = ficha.criadoEm?.toDate?.();
+  const fim = ficha.dataVencimento?.toDate?.();
+  if (!inicio || !fim) return { pct: 0, diasRestantes: 0 };
+
+  const hoje = new Date();
+  const totalMs = fim - inicio;
+  const passadoMs = Math.min(Date.now() - inicio.getTime(), totalMs);
+  const semanasPassadas = passadoMs / (7 * 24 * 60 * 60 * 1000);
+  const semanasEfetivas = Math.min(ficha.semanas || Math.ceil(totalMs / (7 * 24 * 60 * 60 * 1000)), semanasPassadas);
+
+  const treinosPorSemana = ficha.treinos?.length || 1;
+  const sessoesEsperadas = Math.max(1, Math.round(semanasEfetivas * treinosPorSemana));
+  const sessoesRealizadas = historico.filter(h => h.fichaId === ficha.id).length;
+
+  const pct = Math.min(100, Math.round((sessoesRealizadas / sessoesEsperadas) * 100));
+  const diasRestantes = Math.max(0, Math.ceil((fim - hoje) / 86400000));
+  return { pct, diasRestantes };
+}
+
+const ESFORCO_LEGADO_T = { facil: 33, moderado: 66, dificil: 100 };
 
 function calcIntensidadeItem(item) {
-  const todas = (item.exercicios || []).flatMap(ex => (ex.esforco || []).filter(Boolean));
+  const todas = (item.exercicios || [])
+    .flatMap(ex => (ex.esforco || []).map(e => typeof e === 'number' ? e : (ESFORCO_LEGADO_T[e] ?? null)).filter(v => v !== null));
   if (!todas.length) return null;
-  return Math.round(todas.reduce((a, e) => a + (ESFORCO_VALOR_T[e] || 0), 0) / todas.length);
+  return Math.round(todas.reduce((a, b) => a + b, 0) / todas.length);
 }
 
 function corIntensidade(v) {
@@ -218,6 +253,8 @@ export default function TreinosScreen({ navigation }) {
   const [histExpandido, setHistExpandido] = useState(false);
   const [treinoExpandido, setTreinoExpandido] = useState(null);
   const [fichaAnalise, setFichaAnalise] = useState(null);
+  const [filtro, setFiltro] = useState('ativas');
+  const [semanaVistaMap, setSemanaVistaMap] = useState({});
 
   useFocusEffect(
     useCallback(() => {
@@ -253,28 +290,63 @@ if (carregando) {
     return <View style={s.center}><ActivityIndicator color={theme.red} size="large" /></View>;
   }
 
+  const fichasFiltradas = fichas.filter(f => {
+    const st = calcularStatusFicha(f.dataVencimento);
+    return filtro === 'ativas' ? st !== 'vencida' : st === 'vencida';
+  });
+
   return (
     <>
     <ScrollView style={s.container} contentContainerStyle={s.scroll}>
       <Text style={s.titulo}>Treinos</Text>
 
-      {fichas.length === 0 ? (
+      {/* Filtro */}
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+        {[{ id: 'ativas', label: 'Ativas' }, { id: 'vencidas', label: 'Concluidas' }].map(op => (
+          <TouchableOpacity
+            key={op.id}
+            onPress={() => setFiltro(op.id)}
+            style={{
+              paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+              backgroundColor: filtro === op.id ? theme.red : theme.elevated,
+              borderWidth: 1,
+              borderColor: filtro === op.id ? theme.red : theme.border,
+            }}
+          >
+            <Text style={{
+              fontSize: 13, fontWeight: '700',
+              color: filtro === op.id ? '#fff' : theme.textSecondary,
+            }}>
+              {op.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {fichasFiltradas.length === 0 ? (
         <View style={s.vazio}>
           <Ionicons name="barbell-outline" size={52} color={theme.textTertiary} />
-          <Text style={s.vazioTexto}>Nenhuma ficha ativa.</Text>
-          <Text style={s.vazioSub}>Aguarde seu personal criar sua ficha.</Text>
+          <Text style={s.vazioTexto}>{filtro === 'ativas' ? 'Nenhuma ficha ativa.' : 'Nenhuma ficha anterior.'}</Text>
+          <Text style={s.vazioSub}>{filtro === 'ativas' ? 'Aguarde seu personal criar sua ficha.' : 'Fichas vencidas aparecem aqui.'}</Text>
         </View>
       ) : (
-        fichas.map(ficha => {
+        fichasFiltradas.map(ficha => {
           const status = calcularStatusFicha(ficha.dataVencimento);
-          const { pct, diasRestantes } = ficha.criadoEm
-            ? calcularProgresso(ficha.criadoEm, ficha.dataVencimento)
-            : { pct: 0, diasRestantes: 0 };
+          const { pct, diasRestantes } = calcularProgressoFrequencia(ficha, historico);
           const semanaIdx = semanaAtualDaFicha(ficha);
-          const period = resolverPeriod(ficha, semanaIdx);
+          const semanaVista = semanaVistaMap[ficha.id] ?? semanaIdx;
+          const period = resolverPeriod(ficha, semanaVista);
+          const periodAtual = resolverPeriod(ficha, semanaIdx);
           const statusCor = CORES_STATUS[status];
           const semanas = todasSemanas(ficha);
           const temPeriodizacao = semanas.some(s => s.period !== null);
+          const setSemanaVista = (idx) => setSemanaVistaMap(prev => ({ ...prev, [ficha.id]: idx }));
+          const proximaLetra = proximoTreinoLetra(ficha, historico);
+          const metaDias = ficha.diasPorSemana || null;
+          const inicioSemana = inicioSemanaAtual();
+          const sessoesEstaSemana = historico.filter(
+            h => h.fichaId === ficha.id && h.dataHora?.toDate?.() >= inicioSemana
+          ).length;
           return (
             <View key={ficha.id} style={s.fichaCard}>
 
@@ -282,9 +354,34 @@ if (carregando) {
               <View style={s.fichaTopRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.fichaNome}>{ficha.nome}</Text>
-                  <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
-                    Semana {semanaIdx + 1} de {ficha.semanas || '—'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                    <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                      Semana {semanaIdx + 1} de {ficha.semanas || '—'}
+                    </Text>
+                    {metaDias && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: sessoesEstaSemana >= metaDias
+                          ? '#22c55e18' : theme.elevated,
+                        borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2,
+                        borderWidth: 1,
+                        borderColor: sessoesEstaSemana >= metaDias ? '#22c55e40' : theme.border,
+                      }}>
+                        <Ionicons
+                          name="flame-outline"
+                          size={11}
+                          color={sessoesEstaSemana >= metaDias ? '#22c55e' : theme.textTertiary}
+                        />
+                        <Text style={{
+                          fontSize: 11, fontWeight: '700',
+                          color: sessoesEstaSemana >= metaDias ? '#22c55e' : theme.textSecondary,
+                        }}>
+                          {sessoesEstaSemana}/{metaDias} esta semana
+                          {sessoesEstaSemana > metaDias ? ' +bonus' : ''}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity
@@ -336,9 +433,15 @@ if (carregando) {
                     {semanas.map(({ idx, semana, period: p }) => {
                       const isAtual = idx === semanaIdx;
                       const isPassada = idx < semanaIdx;
+                      const isSelecionada = idx === semanaVista;
                       const dotCor = p?.tipo?.cor || theme.border;
                       return (
-                        <View key={idx} style={{ flex: 1, alignItems: 'center' }}>
+                        <TouchableOpacity
+                          key={idx}
+                          style={{ flex: 1, alignItems: 'center' }}
+                          onPress={() => setSemanaVista(idx)}
+                          activeOpacity={0.7}
+                        >
                           <View style={{
                             width: '100%',
                             borderRadius: 12,
@@ -347,33 +450,47 @@ if (carregando) {
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: 4,
-                            backgroundColor: isPassada ? dotCor + '18' : isAtual ? dotCor + '20' : dotCor + '10',
-                            borderWidth: isAtual ? 2 : 1,
-                            borderColor: isAtual ? dotCor : dotCor + '40',
-                            opacity: !isPassada && !isAtual ? 0.7 : 1,
+                            backgroundColor: isAtual ? dotCor : isPassada ? dotCor + '18' : dotCor + '10',
+                            borderWidth: isSelecionada && !isAtual ? 2 : 1,
+                            borderColor: isAtual ? dotCor : isSelecionada ? dotCor : dotCor + '40',
+                            opacity: !isPassada && !isAtual && !isSelecionada ? 0.6 : 1,
+                            ...(isAtual ? {
+                              elevation: 6,
+                              shadowColor: dotCor,
+                              shadowOffset: { width: 0, height: 3 },
+                              shadowOpacity: 0.45,
+                              shadowRadius: 6,
+                            } : {}),
                           }}>
                             {isPassada
-                              ? <Ionicons name="checkmark-circle" size={16} color={dotCor} />
-                              : <Text style={{ fontSize: 9, fontWeight: '700', color: dotCor, letterSpacing: 0.5 }}>S{semana}</Text>
+                              ? <Ionicons name="checkmark-circle" size={16} color={isAtual ? '#fff' : dotCor} />
+                              : <Text style={{ fontSize: 9, fontWeight: '700', color: isAtual ? '#fff' : dotCor, letterSpacing: 0.5 }}>S{semana}</Text>
                             }
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: isAtual ? dotCor : isPassada ? dotCor : theme.textSecondary, textAlign: 'center', lineHeight: 13 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: isAtual ? '#ffffffcc' : isSelecionada ? dotCor : isPassada ? dotCor : theme.textSecondary, textAlign: 'center', lineHeight: 13 }}>
                               {p?.tipo?.label || '—'}
                             </Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
                 </View>
               )}
 
-              {/* Periodization banner — current week */}
+              {/* Periodization banner — semana selecionada */}
               {period && (
                 <View style={[s.periodBanner, { backgroundColor: period.tipo.cor + '12', borderColor: period.tipo.cor + '40' }]}>
                   <Ionicons name={period.tipo.icon} size={18} color={period.tipo.cor} style={{ marginTop: 1 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.periodLabel, { color: period.tipo.cor }]}>
-                      {period.tipo.label} esta semana
+                      {period.tipo.label}
+                      <Text style={{ fontWeight: '500', color: period.tipo.cor + 'cc' }}>
+                        {semanaVista === semanaIdx
+                          ? ' — esta semana'
+                          : semanaVista < semanaIdx
+                          ? ` — semana ${semanaVista + 1} (concluida)`
+                          : ` — semana ${semanaVista + 1} (planejado)`}
+                      </Text>
                     </Text>
                     {PERIOD_DESC[period.tipo.id] && (
                       <Text style={s.periodDesc}>{PERIOD_DESC[period.tipo.id]}</Text>
@@ -391,17 +508,6 @@ if (carregando) {
                 </View>
               )}
 
-              {/* Evolution section — always visible */}
-              {temPeriodizacao && (
-                <>
-                  <SecaoEvolucao
-                    ficha={ficha}
-                    historico={historico}
-                    theme={theme}
-                  />
-                  <View style={[s.evolDivider, { marginTop: 14, marginBottom: 14 }]} />
-                </>
-              )}
 
               {/* Treinos */}
               {ficha.treinos.length === 0 ? (
@@ -411,62 +517,61 @@ if (carregando) {
                   <Text style={s.treinosLabel}>TREINOS</Text>
                   {ficha.treinos.map(treino => {
                     const expanded = treinoExpandido === treino.id;
-                    const diaHoje = DIAS_PT[new Date().getDay()];
-                    const ehHoje = treino.diasDaSemana?.includes(diaHoje);
+                    const ehProximo = treino.letra === proximaLetra;
                     return (
-                      <View key={treino.id} style={[s.treinoCard, ehHoje && { backgroundColor: theme.red, borderColor: theme.red }]}>
+                      <View key={treino.id} style={[s.treinoCard, null]}>
                         <TouchableOpacity
-                          style={[s.treinoHeader, ehHoje && { paddingVertical: 16 }]}
+                          style={s.treinoHeader}
                           onPress={() => setTreinoExpandido(expanded ? null : treino.id)}
                           activeOpacity={0.85}
                         >
-                          {ehHoje ? (
-                            <>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.65)', letterSpacing: 0.8, marginBottom: 4 }}>TREINO DE HOJE</Text>
-                                <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 3 }}>Treino {treino.letra}</Text>
-                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                                  {[treino.diasDaSemana?.join(' · '), `${treino.exercicios?.length || 0} exercicios`].filter(Boolean).join('  ·  ')}
-                                </Text>
-                              </View>
+                          <>
+                            <View style={s.treinoLetra}>
+                              <Text style={s.treinoLetraTexto}>{treino.letra}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              {ehProximo && (
+                                <Text style={{ fontSize: 10, fontWeight: '800', color: theme.red, letterSpacing: 0.8, marginBottom: 2 }}>PROXIMO TREINO</Text>
+                              )}
+                              <Text style={s.treinoNome}>Treino {treino.letra}</Text>
+                              <Text style={s.treinoExsCount}>
+                                {treino.exercicios?.length || 0} exercicios
+                              </Text>
+                              {ehProximo && periodAtual && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6,
+                                  backgroundColor: periodAtual.tipo.cor + '15', borderRadius: 8,
+                                  paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' }}>
+                                  <Ionicons name={periodAtual.tipo.icon} size={11} color={periodAtual.tipo.cor} />
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: periodAtual.tipo.cor }}>
+                                    {periodAtual.tipo.label}
+                                    {(periodAtual.series || periodAtual.reps) && (
+                                      <Text style={{ fontWeight: '500' }}>
+                                        {'  ·  '}{[
+                                          periodAtual.series && `${periodAtual.series} series`,
+                                          periodAtual.reps && `${periodAtual.reps} reps`,
+                                          periodAtual.carga && `${periodAtual.carga}% carga`,
+                                        ].filter(Boolean).join(' · ')}
+                                      </Text>
+                                    )}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <View style={s.treinoActions}>
+                              <Ionicons
+                                name={expanded ? 'chevron-up' : 'chevron-down'}
+                                size={16}
+                                color={theme.textTertiary}
+                              />
                               <TouchableOpacity
-                                style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
+                                style={s.playBtn}
                                 onPress={() => navigation.navigate('VisualizarTreino', { treino, ficha })}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <Ionicons name="play" size={16} color="#fff" />
+                                <Ionicons name="play" size={14} color="#fff" />
                               </TouchableOpacity>
-                            </>
-                          ) : (
-                            <>
-                              <View style={s.treinoLetra}>
-                                <Text style={s.treinoLetraTexto}>{treino.letra}</Text>
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={s.treinoNome}>Treino {treino.letra}</Text>
-                                {treino.diasDaSemana?.length > 0 && (
-                                  <Text style={s.treinoDias}>{treino.diasDaSemana.join(' · ')}</Text>
-                                )}
-                                <Text style={s.treinoExsCount}>
-                                  {treino.exercicios?.length || 0} exercicios
-                                </Text>
-                              </View>
-                              <View style={s.treinoActions}>
-                                <Ionicons
-                                  name={expanded ? 'chevron-up' : 'chevron-down'}
-                                  size={16}
-                                  color={theme.textTertiary}
-                                />
-                                <TouchableOpacity
-                                  style={s.playBtn}
-                                  onPress={() => navigation.navigate('VisualizarTreino', { treino, ficha })}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Ionicons name="play" size={14} color="#fff" />
-                                </TouchableOpacity>
-                              </View>
-                            </>
-                          )}
+                            </View>
+                          </>
                         </TouchableOpacity>
 
                         {expanded && (
@@ -482,7 +587,11 @@ if (carregando) {
                                 <Text style={s.exNome} numberOfLines={1}>{ex.nome}</Text>
                                 <Text style={s.exDetalhe}>
                                   {[
-                                    ex.series && ex.reps && `${ex.series}×${ex.reps}`,
+                                    periodAtual?.series && periodAtual?.reps
+                                      ? `${periodAtual.series}×${periodAtual.reps}`
+                                      : ex.series && ex.reps
+                                      ? `${ex.series}×${ex.reps}`
+                                      : null,
                                     ex.descanso,
                                   ].filter(Boolean).join('  ')}
                                 </Text>

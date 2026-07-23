@@ -246,20 +246,6 @@ function Dashboard({ historico }) {
         </View>
       </View>
 
-      {historico.length > 0 && (
-        <View style={dash.intensWrap}>
-          <View style={dash.intensHeader}>
-            <Text style={dash.intensTitle}>ULTIMO TREINO</Text>
-            <Text style={[dash.intensBadge, { color: intensidadeCor }]}>{intensidadeLabel}</Text>
-          </View>
-          <View style={dash.barBg}>
-            <View style={[dash.barFill, { width: `${intensidade}%`, backgroundColor: intensidadeCor }]} />
-          </View>
-          {mediaCarga > 0 && (
-            <Text style={dash.mediaCarga}>{mediaCarga} kg media de carga</Text>
-          )}
-        </View>
-      )}
     </View>
   );
 }
